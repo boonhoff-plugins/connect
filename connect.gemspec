@@ -12,6 +12,6 @@ Gem::Specification.new do |s|
   s.authors = ['Robert Rassau']
   s.email = ['rassaur@yahoo.de']
   s.files = ['lib/example.rb']
-  s.homepage = 'https://github.com/rrb-plugins/connect'
-  s.metadata = { 'source_code_uri' => 'https://github.com/rrb-plugins/connect' }
+  s.homepage = 'https://github.com/boonhoff-plugins/connect'
+  s.metadata = { 'source_code_uri' => 'https://github.com/boonhoff-plugins/connect' }
 end
