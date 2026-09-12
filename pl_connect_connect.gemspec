@@ -10,7 +10,7 @@ Gem::Specification.new do |s|
                        several lines.
                    EOF
   s.authors = ['']
-  s.email = ['rassaur@gmail.com']
+  s.email = ['rassaur@protonmail.com']
   s.files = ['lib/example.rb']
   s.homepage = 'https://rubygems.org/gems/example'
   s.metadata = { 'source_code_uri' => 'https://github.com/example/example' }
