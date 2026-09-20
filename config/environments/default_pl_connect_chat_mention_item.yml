@@ -1,0 +1,12 @@
+# Area Plugin PlConnectChatMentionItem / ChatMentionItem
+
+default: &default
+  pl_connect_chat_mention_items:
+    key: 
+test:
+  <<: *default
+development:
+  <<: *default
+production:
+  <<: *default
+

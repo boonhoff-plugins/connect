@@ -1,0 +1,12 @@
+# Area Plugin PlConnectCallItem / CallItem
+
+default: &default
+  pl_connect_call_items:
+    key: 
+test:
+  <<: *default
+development:
+  <<: *default
+production:
+  <<: *default
+

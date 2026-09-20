@@ -1,0 +1,57 @@
+<%#
+  Calendar pane.
+
+  Reuses the existing calendar completely: the events come from
+  /calendar_item/events_feed and the rendering is done by the existing
+  event_calendar Stimulus controller. Nothing about the calendar domain is
+  duplicated inside the Connect plugin - only the surrounding chrome differs.
+
+  Locals:
+    dom_id - unique element id, because the start page and the full calendar
+             page use this partial with different surroundings
+%>
+<% dom_id = local_assigns.fetch(:dom_id, "pl_connect_calendar") %>
+
+<div class="flex h-full min-h-0 flex-col bg-base-100">
+  <div class="flex shrink-0 items-center justify-between gap-2 border-b border-base-300 px-4 py-2">
+    <h2 class="text-sm font-semibold">
+      <%= I18n.t("pl_connect.workspace.section.calendar") %>
+    </h2>
+
+    <% if session[:user].present? %>
+      <%#
+        Opens the regular calendar entry dialog. boonhoff.dialog.open loads the
+        form as a modal, so the workspace stays in place behind it - the modal
+        request carries request_type=modal_window and therefore resolves to the
+        modal layout, not to this full-screen one.
+      %>
+      <button type="button"
+              class="btn btn-primary btn-xs"
+              onclick="return boonhoff.dialog.open({'url': '/calendar_item/edit_element', 'title': '<%= j I18n.t("controller.calendar_item.new_event") %>', 'width': 600, 'height': 400});">
+        <i class="fa-solid fa-plus" aria-hidden="true"></i>
+        <%= I18n.t("controller.calendar_item.new_event") %>
+      </button>
+    <% end %>
+  </div>
+
+  <div class="min-h-0 flex-1 overflow-y-auto p-4">
+    <div id="<%= dom_id %>"
+         data-controller="event-calendar"
+         data-event-calendar-feed-url-value="/calendar_item/events_feed"
+         data-event-calendar-edit-url-value="/calendar_item/edit_element/"
+         data-event-calendar-set-last-view-url-value="/calendar_item/set_last_view"
+         data-event-calendar-default-view-value="<%= @c[:default_view] %>"
+         data-event-calendar-first-day-value="<%= @c[:first_day] %>"
+         data-event-calendar-weekends-active-value="<%= @c[:weekends_active] %>"
+         data-event-calendar-slot-min-time-value="<%= @c[:slot_min_time] %>"
+         data-event-calendar-slot-max-time-value="<%= @c[:slot_max_time] %>"
+         data-event-calendar-time-format24h-active-value="<%= @c[:time_format_24h_active] %>"
+         data-event-calendar-new-event-title-value="<%= I18n.t("controller.calendar_item.new_event") %>"
+         data-event-calendar-edit-event-title-value="<%= I18n.t("controller.calendar_item.edit_event") %>"
+         data-event-calendar-tooltip-description-label-value="<%= I18n.t("controller.calendar_item.tooltip_description") %>"
+         data-event-calendar-tooltip-location-label-value="<%= I18n.t("controller.calendar_item.tooltip_location") %>"
+         data-event-calendar-tooltip-organizer-label-value="<%= I18n.t("controller.calendar_item.tooltip_organizer") %>"
+         data-event-calendar-tooltip-creator-label-value="<%= I18n.t("controller.calendar_item.tooltip_creator") %>">
+    </div>
+  </div>
+</div>

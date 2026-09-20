@@ -1,0 +1,62 @@
+<%#
+  Workspace top bar.
+
+  Holds the title of the current section, the (still inert) global search entry
+  and the identity block of the logged-in user. Only the user's own data is
+  shown here - no information about other users leaks into the shell.
+%>
+<% user = @c[:pl_connect_user] %>
+<% login = user&.login.to_s %>
+<header class="flex h-12 shrink-0 items-center gap-3 border-b border-base-300 bg-base-100 px-4">
+  <h1 class="truncate text-sm font-semibold">
+    <%= @c[:header_title].presence || I18n.t("pl_connect.workspace.title") %>
+  </h1>
+
+  <%#
+    Global search over the conversations the user is a member of. The scope is
+    enforced server-side in PlConnectApiController#search, so a manipulated
+    request cannot widen it. Results are rendered from body_plain only, never
+    from the stored markup.
+
+    The input is part of the layout, which is why the chat Stimulus controller
+    is mounted on the layout wrapper rather than on the individual sections.
+  %>
+  <div class="relative mx-auto w-full max-w-md">
+    <label class="input input-sm input-bordered flex w-full items-center gap-2">
+      <i class="fa-solid fa-magnifying-glass text-xs" aria-hidden="true"></i>
+      <input type="search"
+             class="grow"
+             autocomplete="off"
+             placeholder="<%= I18n.t("pl_connect.workspace.search_placeholder") %>"
+             data-pl-connect-chat-target="search"
+             data-action="input->pl-connect-chat#onSearchInput">
+    </label>
+
+    <div class="absolute left-0 right-0 top-full z-30 mt-1 hidden max-h-80 overflow-y-auto rounded-box border border-base-300 bg-base-100 shadow-lg"
+         data-pl-connect-chat-target="searchResults"></div>
+  </div>
+
+  <div class="flex shrink-0 items-center gap-2">
+    <%#
+      Presence indicator for the logged-in user. The state is held in the cache
+      only (PlConnect::PresenceService) and never written to the database, so
+      no movement profile can be reconstructed from it later. The dot starts
+      neutral and is switched by the presence Stimulus controller once the
+      WebSocket heartbeat is running.
+    %>
+    <% if @c[:pl_connect_presence_active] %>
+      <span class="inline-flex items-center gap-1 text-xs text-base-content/70"
+            data-pl-connect-presence-self="<%= user&.uuid %>">
+        <span class="inline-block h-2 w-2 rounded-full bg-base-content/30"
+              data-pl-connect-presence-target="indicator"></span>
+        <span data-pl-connect-presence-label
+              data-pl-connect-presence-target="label"><%= I18n.t("pl_connect.presence.unknown") %></span>
+      </span>
+    <% end %>
+
+    <span class="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-content"
+          title="<%= login %>">
+      <%= login.first(2).upcase %>
+    </span>
+  </div>
+</header>

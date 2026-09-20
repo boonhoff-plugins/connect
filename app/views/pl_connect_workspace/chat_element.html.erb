@@ -1,0 +1,10 @@
+<%#
+  Full chat surface: conversation list plus message pane.
+%>
+<div class="flex min-h-0 w-full">
+  <section class="flex min-h-0 w-80 shrink-0 flex-col border-r border-base-300">
+    <%= render "pl_connect_workspace/conversation_list", conversations: @c[:pl_connect_conversations] %>
+  </section>
+
+  <%= render "pl_connect_workspace/message_pane" %>
+</div>

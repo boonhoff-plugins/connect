@@ -1,0 +1,6 @@
+# frozen_string_literal: true
+
+# ImportPluginPlConnectChatAttachmentItemHelper
+module ImportPluginPlConnectChatAttachmentItemHelper
+
+end

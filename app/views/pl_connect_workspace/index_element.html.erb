@@ -1,0 +1,24 @@
+<%#
+  Workspace start page.
+
+  Two columns side by side: the chat on the left, the calendar on the right -
+  the overview a user wants when they open the workspace in the morning.
+
+  On narrow screens the two columns stack, with the chat first, because that is
+  the part people interact with most.
+%>
+<div class="flex min-h-0 w-full flex-col lg:flex-row">
+  <section class="flex min-h-0 w-full shrink-0 flex-col border-b border-base-300 lg:w-96 lg:border-b-0 lg:border-r">
+    <%#
+      linked: true - the start page has no message pane, so a click has to lead
+      to the chat section instead of trying to open the conversation in place.
+    %>
+    <%= render "pl_connect_workspace/conversation_list",
+               conversations: @c[:pl_connect_conversations],
+               linked: true %>
+  </section>
+
+  <section class="flex min-h-0 w-full flex-1">
+    <%= render "pl_connect_workspace/calendar", dom_id: "pl_connect_home_calendar" %>
+  </section>
+</div>

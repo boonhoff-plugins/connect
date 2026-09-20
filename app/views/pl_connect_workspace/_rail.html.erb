@@ -1,0 +1,67 @@
+<%#
+  Icon rail - the primary navigation of the workspace.
+
+  Kept deliberately narrow (64px) so the two working columns next to it get as
+  much horizontal space as possible. Links are plain Turbo Drive visits: every
+  workspace section uses the same layout, so a full page visit swaps only the
+  content and keeps the rail visually stable.
+%>
+<nav class="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-base-300 bg-base-300 py-2"
+     aria-label="<%= I18n.t("pl_connect.workspace.title") %>">
+
+  <%# Plugin mark. Links back to the workspace start page. %>
+  <a href="/pl_connect_workspace/index_element"
+     class="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-content"
+     title="<%= I18n.t("pl_connect.workspace.title") %>">
+    <i class="fa-solid fa-bolt text-lg" aria-hidden="true"></i>
+  </a>
+
+  <% (@c[:pl_connect_sections] || []).each do |section| %>
+    <% active = (@c[:pl_connect_section].to_s == section[:key]) %>
+    <a href="<%= section[:path] %>"
+       class="group relative flex w-14 flex-col items-center gap-1 rounded-lg px-1 py-2 transition-colors <%= active ? "bg-base-100 text-primary" : "text-base-content/70 hover:bg-base-200 hover:text-base-content" %>"
+       aria-current="<%= active ? "page" : "false" %>"
+       title="<%= I18n.t("pl_connect.workspace.section.#{section[:i18n]}") %>">
+      <span class="relative">
+        <i class="<%= section[:icon] %> text-xl" aria-hidden="true"></i>
+
+        <%#
+          Unread badge. total_unread is computed server-side for the first
+          paint; the chat Stimulus controller keeps it up to date afterwards.
+
+          The element is always rendered and only hidden when the counter is
+          zero, because the controller has to be able to reveal it later
+          without knowing the sidebar markup.
+        %>
+        <% if section[:key] == "chat" %>
+          <% total_unread = @c[:pl_connect_total_unread].to_i %>
+          <span class="badge badge-xs badge-error absolute -right-3 -top-2 <%= "hidden" unless total_unread.positive? %>"
+                data-pl-connect-total-unread
+                data-pl-connect-chat-target="totalUnread">
+            <%= total_unread > 99 ? "99+" : total_unread %>
+          </span>
+        <% end %>
+      </span>
+
+      <span class="text-[10px] leading-none"><%= I18n.t("pl_connect.workspace.section.#{section[:i18n]}") %></span>
+    </a>
+  <% end %>
+
+  <div class="flex-1"></div>
+
+  <%#
+    Exit back to the regular application.
+
+    data-turbo="false" forces a full page load on purpose: the regular layout
+    has a completely different body structure (navbar, footer, "main_content"
+    turbo frame). Letting Turbo Drive morph between the two layouts has no
+    benefit here and only risks leaving stale workspace state behind.
+  %>
+  <a href="/"
+     data-turbo="false"
+     class="flex w-14 flex-col items-center gap-1 rounded-lg px-1 py-2 text-base-content/70 transition-colors hover:bg-base-200 hover:text-base-content"
+     title="<%= I18n.t("pl_connect.workspace.exit") %>">
+    <i class="fa-solid fa-arrow-right-from-bracket text-xl" aria-hidden="true"></i>
+    <span class="text-[10px] leading-none"><%= I18n.t("pl_connect.workspace.exit") %></span>
+  </a>
+</nav>

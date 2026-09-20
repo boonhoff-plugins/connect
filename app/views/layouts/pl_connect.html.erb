@@ -1,0 +1,205 @@
+<%#
+  Connect workspace layout.
+
+  A deliberately reduced, full-screen shell for the Connect plugin. It keeps
+  everything the application needs to stay functional (theme, CSRF token, CSP
+  nonce, asset tags, tenant overrides, server notifications, flash messages)
+  but drops the parts that would get in the way of a chat/calendar surface:
+
+    * no navbar          - navigation happens through the icon rail
+    * no footer          - vertical space is needed for the message list
+    * no "main_content"  - the workspace is a top-level surface, not a fragment
+      turbo frame          inside the regular application shell
+
+  Because the plugin's app/views directory is appended to
+  config.paths["app/views"] (see system/config/application.rb), this file is
+  found by name alone - no extra registration is required.
+%>
+<!DOCTYPE html>
+<html data-theme="<%= CssHelper.theme(user: session[:user]) %>" lang="<%= session[:locale].present? ? session[:locale] : I18n.default_locale %>">
+  <head>
+    <title><%= [ @c[:header_title].presence, I18n.t("pl_connect.workspace.title"), SYSTEM[:server][:default][:system_title] ].compact.join(" - ") %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <%= render_configurable_meta_tags(request: request) %>
+    <%# The CSRF token is required by every fetch() call against
+        PlConnectApiController: ApplicationController uses
+        `protect_from_forgery with: :null_session` for JSON, so a request
+        without the token silently loses its session and is answered with 401. %>
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+    <%= yield :head %>
+    <%= favicon_link_tag SYSTEM[:server][:default][:system_favicon] %>
+    <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
+    <%= javascript_include_tag "application", "data-turbo-track": "reload", type: "module" %>
+
+    <%# Tenant-specific overrides, identical to the regular application layout. %>
+    <% if session[:user]&.get_tenant %>
+      <% tenant_name = session[:user].get_tenant[:name] %>
+      <% css_path = Rails.root.join("public", "assets", "tenants", "tenant_#{tenant_name}.css") %>
+      <% js_path  = Rails.root.join("public", "assets", "tenants", "tenant_#{tenant_name}.js") %>
+      <%= stylesheet_link_tag "tenants/tenant_#{tenant_name}.css", media: "all" if css_path.exist? %>
+      <%= javascript_include_tag "tenants/tenant_#{tenant_name}.js", nonce: request.content_security_policy_nonce if js_path.exist? %>
+    <% end %>
+  </head>
+
+  <%#
+    h-dvh instead of h-screen: on mobile browsers h-screen ignores the
+    collapsing address bar, which would push the message composer out of view.
+    overflow-hidden keeps the page itself from scrolling - only the individual
+    panes scroll, which is what makes the surface feel like an application
+    rather than a document.
+  %>
+  <body class="h-dvh overflow-hidden bg-base-200 text-base-content antialiased">
+    <% if session[:user].present? %>
+      <%# Server notifications are delivered through the same streams as in the
+          regular layout, so system messages still reach the user while they
+          are working inside the workspace. %>
+      <%= turbo_stream_from "server_notification_#{session[:user][:id]}" %>
+      <%= turbo_stream_from "server_notification" %>
+      <span id="server_notification_div"></span>
+      <span id="event_log_live_count" data-count="0" class="hidden"></span>
+    <% end %>
+
+    <%#
+      Both workspace Stimulus controllers are mounted here rather than on the
+      individual sections.
+
+      pl-connect-chat needs the conversation list and the message pane (from
+      the yielded section) as well as the search field in the top bar and the
+      unread badge in the rail (from this layout). A Stimulus controller only
+      sees targets inside its own element, so the wrapper that contains all
+      four is the only correct mount point. Sections without a message pane run
+      the same controller; it simply has nothing to render into.
+
+      pl-connect-presence keeps the heartbeat alive across section changes and
+      re-dispatches per-user notifications as DOM events, which is why it must
+      not be bound to a single section either.
+
+      pl-connect-call needs to be mounted here for the same reason as
+      pl-connect-presence: an incoming call has to reach the user regardless of
+      which section (or which conversation) they currently have open, and the
+      call/video buttons it wires live inside the yielded message pane.
+
+      pl-connect-user-picker is the shared "pick a colleague" modal used by the
+      conversation sidebar's "+" button and the Calls surface's start-call
+      buttons. It has to live here for the same reason: both triggers can be on
+      screen regardless of which section is currently rendered.
+
+      The i18n payloads hold static translations only - no user data and no
+      configuration values - so embedding them into the page is safe.
+      ice-servers-value is STUN/TURN connectivity configuration, not a secret
+      by itself (see PlConnect::CallService.ice_servers) - a TURN credential
+      configured there would need its own confidentiality handling, which is
+      why that path is documented as GDPR-relevant at the source.
+    %>
+    <div class="flex h-full w-full"
+         data-controller="pl-connect-chat pl-connect-presence pl-connect-call pl-connect-user-picker"
+         data-pl-connect-chat-viewer-uuid-value="<%= @c[:pl_connect_user]&.uuid %>"
+         data-pl-connect-chat-i18n-value="<%= pl_connect_chat_i18n.to_json %>"
+         data-pl-connect-chat-initial-chat-uuid-value="<%= @c[:pl_connect_initial_chat_uuid] %>"
+         data-pl-connect-presence-active-value="<%= @c[:pl_connect_presence_active] ? "true" : "false" %>"
+         data-pl-connect-presence-i18n-value="<%= pl_connect_presence_i18n.to_json %>"
+         data-pl-connect-call-active-value="<%= @c[:pl_connect_call_active] ? "true" : "false" %>"
+         data-pl-connect-call-viewer-uuid-value="<%= @c[:pl_connect_user]&.uuid %>"
+         data-pl-connect-call-i18n-value="<%= pl_connect_call_i18n.to_json %>"
+         data-pl-connect-call-ice-servers-value="<%= PlConnect::CallService.ice_servers.to_json %>"
+         data-pl-connect-call-pending-value="<%= @c[:pl_connect_pending_call] %>"
+         data-pl-connect-user-picker-i18n-value="<%= pl_connect_user_picker_i18n.to_json %>">
+      <%= render "pl_connect_workspace/rail" %>
+
+      <div class="flex min-w-0 flex-1 flex-col">
+        <%= render "pl_connect_workspace/topbar" %>
+
+        <main class="flex min-h-0 flex-1">
+          <%= yield %>
+        </main>
+      </div>
+
+      <%# Incoming-call banner - shown regardless of which section/conversation
+          is currently open, fed by the presence stream (PlConnectPresenceChannel
+          "call.invite"), never by the chat stream. %>
+      <div data-pl-connect-call-target="incomingBanner"
+           class="hidden fixed inset-x-0 top-4 z-50 mx-auto w-full max-w-sm rounded-box bg-base-100 p-4 shadow-xl ring-1 ring-base-300">
+        <div class="flex items-center gap-3">
+          <i class="fa-solid fa-phone-volume text-primary" aria-hidden="true"></i>
+          <p class="min-w-0 flex-1 truncate text-sm font-semibold" data-pl-connect-call-target="incomingLabel"></p>
+        </div>
+        <div class="mt-3 flex justify-end gap-2">
+          <button type="button" class="btn btn-error btn-sm" data-action="pl-connect-call#declineIncoming">
+            <i class="fa-solid fa-phone-slash" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="btn btn-success btn-sm" data-action="pl-connect-call#acceptIncoming">
+            <i class="fa-solid fa-phone" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+
+      <%# Active-call panel - local/remote video plus the mute/camera/screen/
+          hangup controls. Positioned as a floating overlay rather than
+          replacing the message pane, so the conversation stays usable (e.g. to
+          keep typing) while a call is running. %>
+      <div data-pl-connect-call-target="activePanel"
+           class="hidden fixed inset-x-4 bottom-4 z-40 flex flex-col gap-2 rounded-box bg-base-100 p-3 shadow-xl ring-1 ring-base-300 sm:inset-x-auto sm:right-4 sm:w-[28rem]">
+        <p class="truncate text-sm font-semibold" data-pl-connect-call-target="statusLabel"></p>
+        <div class="relative overflow-hidden rounded-box bg-black">
+          <%# One <video> per remote participant is appended here at runtime by
+              pl_connect_call_controller.js (see _getOrCreateRemoteVideo) - a
+              1:1 call simply ends up with a single tile. %>
+          <div data-pl-connect-call-target="remoteVideos" class="grid grid-cols-2 gap-1 empty:grid-cols-1"></div>
+          <video data-pl-connect-call-target="localVideo" class="absolute bottom-2 right-2 h-16 w-24 rounded border border-base-100 bg-black" autoplay playsinline muted></video>
+        </div>
+        <div class="flex justify-center gap-2">
+          <button type="button" class="btn btn-circle btn-sm" data-action="pl-connect-call#toggleAudio" data-pl-connect-call-target="audioButton">
+            <i class="fa-solid fa-microphone" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="btn btn-circle btn-sm" data-action="pl-connect-call#toggleVideo" data-pl-connect-call-target="videoButton">
+            <i class="fa-solid fa-video" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="btn btn-circle btn-sm" data-action="pl-connect-call#toggleScreen" data-pl-connect-call-target="screenButton">
+            <i class="fa-solid fa-display" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="btn btn-circle btn-sm btn-error" data-action="pl-connect-call#hangup">
+            <i class="fa-solid fa-phone-slash" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+
+      <%#
+        Shared "pick a colleague" modal used by both the conversation sidebar's
+        "+" button (mode "chat") and the Calls surface's start-call buttons
+        (mode "call"). Picking a user resolves/creates the 1:1 chat through
+        /pl_connect_api/open_direct and navigates to it (see
+        pl_connect_user_picker_controller.js) - no in-place list refresh, so
+        the server-rendered sidebar and the new-conversation flow cannot drift
+        apart in what counts as "the current conversation list".
+      %>
+      <div data-pl-connect-user-picker-target="overlay"
+           class="hidden fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-24"
+           data-action="click->pl-connect-user-picker#closeOnBackdrop keydown->pl-connect-user-picker#onKeydown">
+        <div class="w-full max-w-sm rounded-box bg-base-100 p-4 shadow-xl ring-1 ring-base-300">
+          <div class="flex items-center justify-between gap-2">
+            <h2 class="text-sm font-semibold"><%= I18n.t("pl_connect.user_picker.title") %></h2>
+            <button type="button" class="btn btn-ghost btn-xs" data-action="pl-connect-user-picker#close">
+              <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <input type="text"
+                 class="input input-bordered input-sm mt-3 w-full"
+                 placeholder="<%= I18n.t("pl_connect.user_picker.search_placeholder") %>"
+                 autocomplete="off"
+                 data-pl-connect-user-picker-target="input"
+                 data-action="input->pl-connect-user-picker#onInput">
+
+          <p data-pl-connect-user-picker-target="error" class="hidden mt-2 text-xs text-error"></p>
+
+          <div data-pl-connect-user-picker-target="results" class="mt-2 max-h-64 overflow-y-auto"></div>
+        </div>
+      </div>
+    </div>
+
+    <%= render partial: "common/fragment_alerts" %>
+  </body>
+</html>

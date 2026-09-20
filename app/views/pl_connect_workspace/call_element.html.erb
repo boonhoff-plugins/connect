@@ -1,0 +1,57 @@
+<%#
+  Calls surface.
+
+  There is no call history list yet - PlConnectCallItem records only start to
+  exist once a call has actually happened, and browsing them is a separate
+  piece of work. What already works here: starting a new direct (1:1) call
+  without first navigating into an existing conversation. Picking a person
+  from the shared user picker (mode "call") resolves/creates the 1:1 chat via
+  /pl_connect_api/open_direct and navigates to it with a start_call query
+  param; PlConnectWorkspaceController#chat_element validates that param and
+  pl_connect_call_controller.js starts the call as soon as the chat has
+  finished loading (see its pendingValue). Group/channel/team calls are
+  started from inside the conversation itself instead (same call/video
+  buttons in the message pane header, see PlConnect::CallService) - this
+  surface only ever resolves a single person.
+%>
+<div class="flex min-h-0 w-full items-center justify-center bg-base-200 p-6">
+  <div class="flex max-w-md flex-col items-center gap-4 text-center">
+    <i class="fa-solid fa-video text-5xl text-base-content/20" aria-hidden="true"></i>
+
+    <h2 class="text-base font-semibold">
+      <%= I18n.t("pl_connect.call.start_new_call_title") %>
+    </h2>
+
+    <p class="text-sm text-base-content/60">
+      <%= I18n.t("pl_connect.call.start_new_call_text") %>
+    </p>
+
+    <div class="flex gap-2">
+      <button type="button"
+              class="btn btn-outline btn-sm"
+              data-action="pl-connect-user-picker#open"
+              data-pl-connect-picker-mode="call"
+              data-pl-connect-picker-start-call="audio">
+        <i class="fa-solid fa-phone" aria-hidden="true"></i>
+        <%= I18n.t("pl_connect.call.start_audio_call") %>
+      </button>
+      <button type="button"
+              class="btn btn-primary btn-sm"
+              data-action="pl-connect-user-picker#open"
+              data-pl-connect-picker-mode="call"
+              data-pl-connect-picker-start-call="video">
+        <i class="fa-solid fa-video" aria-hidden="true"></i>
+        <%= I18n.t("pl_connect.call.start_video_call") %>
+      </button>
+    </div>
+
+    <%#
+      Stated up front so nobody plans around a capacity that does not exist:
+      a peer-to-peer mesh stays usable up to roughly four participants. Larger
+      conferences would need a media server (SFU), which is out of scope.
+    %>
+    <p class="text-xs text-base-content/50">
+      <%= I18n.t("pl_connect.call.mesh_limit_hint", count: PlConnect::CallService.mesh_participant_limit) %>
+    </p>
+  </div>
+</div>

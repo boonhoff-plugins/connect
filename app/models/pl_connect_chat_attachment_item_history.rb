@@ -1,0 +1,3 @@
+class PlConnectChatAttachmentItemHistory < ApplicationRecord
+  include AssociationHistoryModelConcern
+end

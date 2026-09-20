@@ -1,0 +1,136 @@
+<%#
+  Message pane.
+
+  Mount point of the chat UI. The markup here is the static frame only - header,
+  scroll container, typing line and composer. Everything inside the scroll
+  container is built by pl_connect_chat_controller.js from the JSON of
+  PlConnect::MessageSerializer, because the same payload arrives twice (once
+  from the REST feed, once from an ActionCable broadcast) and must render
+  identically in both cases.
+
+  The Stimulus controller itself sits on the layout wrapper, not on this
+  element, so that the search field in the top bar and the unread badge in the
+  rail are inside the same scope.
+%>
+<div class="flex h-full min-h-0 flex-1 flex-col bg-base-200"
+     data-pl-connect-message-pane>
+
+  <%# Shown until a conversation is opened. %>
+  <div class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center"
+       data-pl-connect-chat-target="emptyState">
+    <i class="fa-regular fa-comments text-5xl text-base-content/20" aria-hidden="true"></i>
+    <p class="max-w-sm text-sm text-base-content/60">
+      <%= I18n.t("pl_connect.chat.select_conversation") %>
+    </p>
+  </div>
+
+  <div class="hidden flex min-h-0 flex-1 flex-col" data-pl-connect-chat-target="conversation">
+
+    <header class="flex h-12 shrink-0 items-center gap-3 border-b border-base-300 bg-base-100 px-4">
+      <span class="min-w-0">
+        <span class="block truncate text-sm font-semibold" data-pl-connect-chat-target="conversationTitle"></span>
+        <span class="block truncate text-[11px] text-base-content/60" data-pl-connect-chat-target="conversationSubtitle"></span>
+      </span>
+
+      <%#
+        Call controls. pl-connect-call is mounted on the layout wrapper (not
+        here), so a plain data-action referencing it works even though this
+        partial only belongs to the chat controller's target list - see
+        app/views/layouts/pl_connect.html.erb for why both controllers share
+        the same root element.
+      %>
+      <span class="ml-auto flex shrink-0 gap-1">
+        <button type="button" class="btn btn-ghost btn-sm"
+                data-action="pl-connect-call#startAudioCall"
+                title="<%= I18n.t("pl_connect.call.start_audio_call") %>">
+          <i class="fa-solid fa-phone" aria-hidden="true"></i>
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm"
+                data-action="pl-connect-call#startVideoCall"
+                title="<%= I18n.t("pl_connect.call.start_video_call") %>">
+          <i class="fa-solid fa-video" aria-hidden="true"></i>
+        </button>
+      </span>
+    </header>
+
+    <%#
+      Scroll container. Older messages are fetched when the user scrolls close
+      to the top (cursor paging on sent_at + id, see
+      PlConnectApiController#messages).
+    %>
+    <div class="min-h-0 flex-1 overflow-y-auto py-2"
+         data-pl-connect-chat-target="messages"
+         data-action="scroll->pl-connect-chat#onMessagesScroll"></div>
+
+    <div class="hidden px-4 py-1 text-center text-[11px] text-base-content/50"
+         data-pl-connect-chat-target="loadingOlder">
+      <%= I18n.t("pl_connect.chat.loading_older") %>
+    </div>
+
+    <%# Typing indicator. Never persisted - see PlConnectChatChannel#typing. %>
+    <div class="hidden px-4 pb-1 text-[11px] italic text-base-content/60"
+         data-pl-connect-chat-target="typing"></div>
+
+    <form class="shrink-0 border-t border-base-300 bg-base-100 px-3 py-2"
+          data-pl-connect-chat-target="form"
+          data-action="submit->pl-connect-chat#submit">
+
+      <%# Only visible while an existing message is being edited. %>
+      <div class="hidden items-center gap-2 pb-1 text-[11px] text-base-content/60"
+           data-pl-connect-chat-target="editNotice">
+        <i class="fa-solid fa-pen" aria-hidden="true"></i>
+        <span><%= I18n.t("pl_connect.chat.editing") %></span>
+        <button type="button" class="btn btn-ghost btn-xs"
+                data-action="pl-connect-chat#cancelEdit">
+          <%= I18n.t("pl_connect.chat.cancel_edit") %>
+        </button>
+      </div>
+
+      <div class="hidden flex flex-wrap gap-1 pb-1" data-pl-connect-pending-files></div>
+
+      <div class="flex items-end gap-2">
+        <%#
+          Hybrid composer.
+
+          The textarea is the default: it is instant, needs no editor instance
+          and covers the vast majority of chat messages. The Lexxy editor is
+          created lazily on the first click of the formatting button - mounting
+          a full Lexical instance for every conversation would be a noticeable
+          cost for something most messages do not need.
+        %>
+        <textarea rows="1"
+                  class="textarea textarea-bordered min-h-0 flex-1 resize-none py-2 text-sm"
+                  placeholder="<%= I18n.t("pl_connect.chat.composer_placeholder") %>"
+                  data-pl-connect-chat-target="input"
+                  data-action="keydown->pl-connect-chat#onComposerKeydown input->pl-connect-chat#onComposerInput"></textarea>
+
+        <div class="hidden flex-1" data-pl-connect-chat-target="richContainer"></div>
+
+        <button type="button" class="btn btn-ghost btn-sm"
+                data-pl-connect-chat-target="richToggle"
+                data-action="pl-connect-chat#toggleRichMode"
+                title="<%= I18n.t("pl_connect.chat.rich_text") %>">
+          <i class="fa-solid fa-font" aria-hidden="true"></i>
+        </button>
+
+        <%#
+          Attachments are uploaded after the message exists, because
+          PlConnect::AttachmentService validates every file against the message
+          it belongs to (size limit and content type allow list).
+        %>
+        <label class="btn btn-ghost btn-sm" title="<%= I18n.t("pl_connect.chat.attach") %>">
+          <i class="fa-solid fa-paperclip" aria-hidden="true"></i>
+          <input type="file" class="hidden" multiple
+                 data-pl-connect-chat-target="fileInput"
+                 data-action="pl-connect-chat#onFilesSelected">
+        </label>
+
+        <button type="submit" class="btn btn-primary btn-sm"
+                data-pl-connect-chat-target="sendButton"
+                title="<%= I18n.t("pl_connect.chat.send") %>">
+          <i class="fa-solid fa-paper-plane" aria-hidden="true"></i>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

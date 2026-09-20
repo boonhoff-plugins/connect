@@ -1,0 +1,106 @@
+---
+de:
+  controller:
+    pl_connect_workspace:
+      title: "Connect"
+      short_title: "Connect"
+  time:
+    formats:
+      pl_connect_time: "%H:%M"
+  date:
+    formats:
+      pl_connect_weekday: "%a"
+      pl_connect_date: "%d.%m.%Y"
+  pl_connect:
+    workspace:
+      title: "Connect"
+      exit: "Zurück"
+      search_placeholder: "Nachrichten und Personen suchen"
+      section:
+        home: "Start"
+        chat: "Chat"
+        calendar: "Kalender"
+        call: "Anrufe"
+    presence:
+      unknown: "Unbekannt"
+      online: "Online"
+      away: "Abwesend"
+      busy: "Beschäftigt"
+      offline: "Offline"
+    chat:
+      conversations: "Unterhaltungen"
+      new_conversation: "Neue Unterhaltung"
+      no_conversations: "Noch keine Unterhaltungen vorhanden."
+      no_messages: "Noch keine Nachrichten"
+      select_conversation: "Wählen Sie eine Unterhaltung aus, um Nachrichten zu lesen und zu schreiben."
+      pinned: "Angeheftet"
+      muted: "Stummgeschaltet"
+      today: "Heute"
+      yesterday: "Gestern"
+      edited: "(bearbeitet)"
+      react: "Reagieren"
+      edit: "Bearbeiten"
+      delete: "Löschen"
+      confirm_delete: "Diese Nachricht löschen?"
+      messages: "Nachrichten"
+      composer_placeholder: "Nachricht schreiben"
+      send: "Senden"
+      attach: "Datei anhängen"
+      rich_text: "Formatierung"
+      editing: "Nachricht wird bearbeitet"
+      cancel_edit: "Abbrechen"
+      loading_older: "Ältere Nachrichten werden geladen ..."
+      typing_one: "%{names} schreibt ..."
+      typing_many: "%{names} schreiben ..."
+      no_results: "Keine passenden Nachrichten."
+      load_failed: "Die Unterhaltung konnte nicht geladen werden."
+      send_failed: "Die Nachricht konnte nicht gesendet werden."
+      session_expired: "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an."
+      type:
+        direct: "Direktchat"
+        group: "Gruppe"
+        team: "Team"
+        channel: "Kanal"
+      # System messages are stored as a stable key plus a payload, so the
+      # sentence is rendered in each reader's own language. The keys are
+      # quoted because they contain a dot and must stay flat - the client
+      # looks them up by the raw system_event_key.
+      system:
+        "member.joined": "%{login} ist der Unterhaltung beigetreten."
+        "member.left": "%{login} hat die Unterhaltung verlassen."
+        "member.added": "%{login} wurde zur Unterhaltung hinzugefügt."
+        "member.removed": "%{login} wurde aus der Unterhaltung entfernt."
+        "conversation.created": "Die Unterhaltung wurde erstellt."
+        "call.started": "%{login} hat einen Anruf gestartet."
+        "call.ended": "Der Anruf wurde beendet."
+        "call.missed": "Verpasster Anruf."
+        "call.declined": "Anruf abgelehnt."
+    user_picker:
+      title: "Person auswählen"
+      search_placeholder: "Name oder Login suchen"
+      no_results: "Keine passenden Personen gefunden."
+      error: "Die Unterhaltung konnte nicht gestartet werden."
+    call:
+      start_new_call_title: "Neuen Anruf starten"
+      start_new_call_text: "Person auswählen, um sofort einen Audio- oder Videoanruf zu starten."
+      mesh_limit_hint: "Funktioniert sofort für Direktgespräche; Gruppen- und Kanalunterhaltungen können einen Anruf mit bis zu %{count} Teilnehmenden starten."
+      ringing: "Klingelt…"
+      connecting: "Verbindung wird hergestellt…"
+      connected: "Verbunden"
+      incoming_call: "Eingehender Anruf von %{login}"
+      accept: "Annehmen"
+      decline: "Ablehnen"
+      hangup: "Auflegen"
+      mute: "Stummschalten"
+      unmute: "Stummschaltung aufheben"
+      camera_on: "Kamera einschalten"
+      camera_off: "Kamera ausschalten"
+      share_screen: "Bildschirm freigeben"
+      stop_share: "Freigabe beenden"
+      call_ended: "Anruf beendet"
+      call_declined: "Anruf abgelehnt"
+      call_missed: "Verpasster Anruf"
+      call_failed: "Der Anruf konnte nicht hergestellt werden."
+      media_error: "Auf Kamera oder Mikrofon konnte nicht zugegriffen werden."
+      start_audio_call: "Audioanruf starten"
+      start_video_call: "Videoanruf starten"

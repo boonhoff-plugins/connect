@@ -1,0 +1,128 @@
+<%#
+  Conversation sidebar.
+
+  Rendered from the same serializer shape the JSON API and the ActionCable
+  broadcasts use (PlConnect::MessageSerializer.conversation_as_json), so the
+  server-rendered first paint and the live updates cannot drift apart in what a
+  conversation looks like.
+
+  Locals:
+    conversations - Array<Hash> from the serializer
+    compact       - Boolean, true for the narrow variant on the start page
+    linked        - Boolean. When true each row is a link to the chat surface
+                    (used on the start page, which has no message pane).
+                    When false each row is a button handled by the chat
+                    Stimulus controller.
+%>
+<% compact = local_assigns.fetch(:compact, false) %>
+<% linked  = local_assigns.fetch(:linked, false) %>
+<% conversations = local_assigns.fetch(:conversations, []) || [] %>
+
+<div class="flex h-full min-h-0 flex-col bg-base-100"
+     data-pl-connect-conversation-list
+     data-pl-connect-chat-target="conversationList">
+
+  <div class="flex shrink-0 items-center justify-between gap-2 border-b border-base-300 px-3 py-2">
+    <h2 class="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+      <%= I18n.t("pl_connect.chat.conversations") %>
+    </h2>
+
+    <%#
+      New conversation. Opens the shared user picker (mode "chat"); picking a
+      person resolves/creates the 1:1 chat via /pl_connect_api/open_direct and
+      navigates to it (see pl_connect_user_picker_controller.js).
+    %>
+    <button type="button"
+            class="btn btn-ghost btn-xs"
+            data-action="pl-connect-user-picker#open"
+            data-pl-connect-picker-mode="chat"
+            title="<%= I18n.t("pl_connect.chat.new_conversation") %>">
+      <i class="fa-solid fa-plus" aria-hidden="true"></i>
+    </button>
+  </div>
+
+  <div class="min-h-0 flex-1 overflow-y-auto">
+    <% if conversations.empty? %>
+      <p class="px-3 py-6 text-center text-sm text-base-content/60">
+        <%= I18n.t("pl_connect.chat.no_conversations") %>
+      </p>
+    <% else %>
+      <ul class="divide-y divide-base-200">
+        <% conversations.each do |conversation| %>
+          <% unread = conversation[:unread_count].to_i %>
+          <%
+            # Same visual row in both variants; only the element type and the
+            # activation mechanism differ.
+            row_class = "flex w-full items-start gap-3 px-3 py-2 text-left transition-colors hover:bg-base-200"
+            row_tag   = linked ? :a : :button
+            row_attrs = { class: row_class, "data-pl-connect-conversation-uuid": conversation[:uuid] }
+
+            if linked
+              row_attrs[:href] = "/pl_connect_workspace/chat_element?chat=#{CGI.escape(conversation[:uuid].to_s)}"
+            else
+              row_attrs[:type] = "button"
+              row_attrs["data-action"] = "pl-connect-chat#selectConversation"
+            end
+          %>
+          <li>
+            <%= content_tag(row_tag, row_attrs) do %>
+              <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-base-300 text-xs font-semibold">
+                <% if conversation[:f_type].to_s == "direct" %>
+                  <%= pl_connect_initials(conversation[:title]) %>
+                <% else %>
+                  <i class="<%= pl_connect_conversation_icon(conversation[:f_type]) %>" aria-hidden="true"></i>
+                <% end %>
+              </span>
+
+              <span class="min-w-0 flex-1">
+                <span class="flex items-baseline gap-2">
+                  <span class="truncate text-sm <%= unread.positive? ? "font-semibold" : "font-medium" %>">
+                    <%= conversation[:title] %>
+                  </span>
+
+                  <% if conversation[:pinned] %>
+                    <i class="fa-solid fa-thumbtack text-[10px] text-base-content/40"
+                       title="<%= I18n.t("pl_connect.chat.pinned") %>" aria-hidden="true"></i>
+                  <% end %>
+                  <% if conversation[:muted] %>
+                    <i class="fa-solid fa-bell-slash text-[10px] text-base-content/40"
+                       title="<%= I18n.t("pl_connect.chat.muted") %>" aria-hidden="true"></i>
+                  <% end %>
+
+                  <span class="ml-auto shrink-0 text-[11px] text-base-content/50">
+                    <%= pl_connect_relative_time(conversation[:last_message_at]) %>
+                  </span>
+                </span>
+
+                <% unless compact %>
+                  <%#
+                    The preview row is also updated live: a "conversation.activity"
+                    event carries the new preview and unread count for
+                    conversations the user is not currently looking at. Both hooks
+                    below are the anchors the chat controller writes into.
+                  %>
+                  <span class="mt-0.5 flex items-center gap-2" data-pl-connect-preview-row>
+                    <%#
+                      The preview is plain text produced by
+                      PlConnect::MessageSanitizer.preview - it is escaped here
+                      like any other text, never inserted as HTML.
+                    %>
+                    <span class="truncate text-xs text-base-content/60" data-pl-connect-preview-text>
+                      <%= conversation[:last_message_preview].presence || I18n.t("pl_connect.chat.no_messages") %>
+                    </span>
+
+                    <% if unread.positive? %>
+                      <span class="badge badge-primary badge-sm ml-auto shrink-0" data-pl-connect-unread="true">
+                        <%= unread > 99 ? "99+" : unread %>
+                      </span>
+                    <% end %>
+                  </span>
+                <% end %>
+              </span>
+            <% end %>
+          </li>
+        <% end %>
+      </ul>
+    <% end %>
+  </div>
+</div>

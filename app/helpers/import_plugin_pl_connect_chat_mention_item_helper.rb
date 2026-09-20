@@ -1,0 +1,6 @@
+# frozen_string_literal: true
+
+# ImportPluginPlConnectChatMentionItemHelper
+module ImportPluginPlConnectChatMentionItemHelper
+
+end

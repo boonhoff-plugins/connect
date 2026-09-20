@@ -1,0 +1,12 @@
+# Area Plugin PlConnectChatItem / ChatItem
+
+default: &default
+  pl_connect_chat_items:
+    key: 
+test:
+  <<: *default
+development:
+  <<: *default
+production:
+  <<: *default
+
