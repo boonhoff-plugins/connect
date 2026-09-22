@@ -45,6 +45,7 @@ post "pl_connect_api/start_call"         => "pl_connect_api#start_call",        
 post "pl_connect_api/answer_call"        => "pl_connect_api#answer_call",        as: :pl_connect_api_answer_call
 post "pl_connect_api/hangup_call"        => "pl_connect_api#hangup_call",        as: :pl_connect_api_hangup_call
 post "pl_connect_api/call_media_state"   => "pl_connect_api#call_media_state",   as: :pl_connect_api_call_media_state
+post "pl_connect_api/upload_voicemail"   => "pl_connect_api#upload_voicemail",   as: :pl_connect_api_upload_voicemail
 
 # --- Workspace shell --------------------------------------------------------
 #

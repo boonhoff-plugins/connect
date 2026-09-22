@@ -833,30 +833,92 @@ export default class extends Controller {
     clear(this.searchResultsTarget)
     toggle(this.searchResultsTarget, true)
 
+    const people = result.people || []
     const hits = result.messages || []
 
-    if (hits.length === 0) {
+    if (people.length === 0 && hits.length === 0) {
       this.searchResultsTarget.appendChild(
         el("p", { class: "px-3 py-4 text-center text-xs text-base-content/60", text: this.i18nValue.no_results || "" })
       )
       return
     }
 
-    hits.forEach((message) => {
+    if (people.length > 0) {
       this.searchResultsTarget.appendChild(
-        el("button", {
-          class: "flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-base-200",
-          attrs: { type: "button" },
-          dataset: { action: "pl-connect-chat#openSearchHit", plConnectConversationUuid: message.chat_uuid },
-          children: [
-            el("span", { class: "text-[11px] font-medium text-base-content/70", text: message.sender_login || "" }),
-            // Search hits are rendered from body_plain, never from body: a hit
-            // list is not a place to execute conversation markup.
-            el("span", { class: "line-clamp-2 text-xs text-base-content/80", text: message.body_plain || "" })
-          ]
+        el("p", {
+          class: "px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-base-content/50",
+          text: this.i18nValue.people_heading || ""
         })
       )
-    })
+
+      people.forEach((person) => {
+        this.searchResultsTarget.appendChild(
+          el("button", {
+            class: "flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-base-200",
+            attrs: { type: "button" },
+            dataset: { action: "pl-connect-chat#openSearchPerson", plConnectUserUuid: person.uuid },
+            children: [
+              el("span", { class: "truncate text-sm", text: person.title || person.login || "" })
+            ]
+          })
+        )
+      })
+    }
+
+    if (hits.length > 0) {
+      if (people.length > 0) {
+        this.searchResultsTarget.appendChild(
+          el("p", {
+            class: "px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-base-content/50",
+            text: this.i18nValue.messages_heading || ""
+          })
+        )
+      }
+
+      hits.forEach((message) => {
+        this.searchResultsTarget.appendChild(
+          el("button", {
+            class: "flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-base-200",
+            attrs: { type: "button" },
+            dataset: { action: "pl-connect-chat#openSearchHit", plConnectConversationUuid: message.chat_uuid },
+            children: [
+              el("span", { class: "text-[11px] font-medium text-base-content/70", text: message.sender_login || "" }),
+              // Search hits are rendered from body_plain, never from body: a hit
+              // list is not a place to execute conversation markup.
+              el("span", { class: "line-clamp-2 text-xs text-base-content/80", text: message.body_plain || "" })
+            ]
+          })
+        )
+      })
+    }
+  }
+
+  // Opens (or creates) the direct conversation with a person found via the top
+  // bar search - the same round trip as pl_connect_user_picker_controller.js's
+  // pick(), just triggered from the merged search dropdown instead of the
+  // dedicated "new chat" modal.
+  async openSearchPerson(event) {
+    const uuid = event.currentTarget?.dataset?.plConnectUserUuid
+    if (!uuid) return
+
+    const result = await apiPost(ENDPOINTS.openDirect, { partner_uuid: uuid })
+    if (result.successful !== true) return
+
+    clear(this.searchResultsTarget)
+    toggle(this.searchResultsTarget, false)
+    this.searchTarget.value = ""
+
+    // Only the chat section has a message pane to open the hit into (see the
+    // comment in openConversation) - every other section has to navigate
+    // there first, same as openSearchHit below and the shared user picker.
+    if (!this.hasMessagesTarget) {
+      const target = new URL("/pl_connect_workspace/chat_element", window.location.origin)
+      target.searchParams.set("chat", result.chat.uuid)
+      window.location.href = target.toString()
+      return
+    }
+
+    this.openConversation(result.chat.uuid)
   }
 
   openSearchHit(event) {
@@ -866,6 +928,18 @@ export default class extends Controller {
     clear(this.searchResultsTarget)
     toggle(this.searchResultsTarget, false)
     this.searchTarget.value = ""
+
+    // The search field lives in the shared layout, so this fires regardless of
+    // which section is currently shown. Only the chat section has a message
+    // pane to open the hit into (see the comment in openConversation) - every
+    // other section (calendar, calls, home) has to navigate there first, the
+    // same way the shared user picker deep-links into a conversation.
+    if (!this.hasMessagesTarget) {
+      const target = new URL("/pl_connect_workspace/chat_element", window.location.origin)
+      target.searchParams.set("chat", uuid)
+      window.location.href = target.toString()
+      return
+    }
 
     this.openConversation(uuid)
   }

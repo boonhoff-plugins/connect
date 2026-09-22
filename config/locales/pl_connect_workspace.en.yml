@@ -52,7 +52,9 @@ en:
       loading_older: "Loading earlier messages..."
       typing_one: "%{names} is typing..."
       typing_many: "%{names} are typing..."
-      no_results: "No matching messages."
+      no_results: "No matches."
+      people_heading: "People"
+      messages_heading: "Messages"
       load_failed: "The conversation could not be loaded."
       send_failed: "The message could not be sent."
       session_expired: "Your session has expired. Please sign in again."
@@ -75,6 +77,11 @@ en:
         "call.ended": "The call has ended."
         "call.missed": "Missed call."
         "call.declined": "Call declined."
+      # Fixed caption for a voicemail message (see
+      # PlConnectApiController#upload_voicemail) - the recording is an
+      # ordinary message with an audio attachment, not a system message, so
+      # this is a ready-made body rather than a system_event_key/payload pair.
+      voicemail_caption: "🎤 Voicemail message"
     user_picker:
       title: "Choose a person"
       search_placeholder: "Search by name or login"
@@ -97,6 +104,8 @@ en:
       camera_off: "Turn off camera"
       share_screen: "Share screen"
       stop_share: "Stop sharing"
+      expand: "Expand call window"
+      collapse: "Collapse call window"
       call_ended: "Call ended"
       call_declined: "Call declined"
       call_missed: "Missed call"
@@ -104,3 +113,6 @@ en:
       media_error: "Camera or microphone could not be accessed."
       start_audio_call: "Start audio call"
       start_video_call: "Start video call"
+      recording_voicemail: "Recording voicemail… hang up to send"
+    shell:
+      new_message: "New message"

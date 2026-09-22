@@ -96,6 +96,49 @@ module PlConnect
       [ configured, PlConnectCallItem::MESH_PARTICIPANT_LIMIT ].min
     end
 
+    # Call-audio and voicemail configuration (see AddPlConnectCallAudioConfig).
+    # Read from PLUGIN&.dig(:pl_connect_connect, ...) - a separate
+    # plugin_group from the ChatItem-scoped settings above, deliberately: see
+    # the migration's own comment for why.
+
+    # Whether the callee hears an audible ringtone (generated client side via
+    # the Web Audio API) while a direct call is ringing.
+    def self.ringtone_active?
+      value = PLUGIN&.dig(:pl_connect_connect, :ringtone_active)
+      return true if value.nil?
+
+      ActiveModel::Type::Boolean.new.cast(value) ? true : false
+    end
+
+    # Whether the caller hears an audible ringback tone while their own
+    # outgoing direct call is ringing.
+    def self.ringback_active?
+      value = PLUGIN&.dig(:pl_connect_connect, :ringback_active)
+      return true if value.nil?
+
+      ActiveModel::Type::Boolean.new.cast(value) ? true : false
+    end
+
+    # Master switch for the voicemail feature (see CallVoicemailTimeoutJob).
+    def self.voicemail_active?
+      value = PLUGIN&.dig(:pl_connect_connect, :voicemail_active)
+      return true if value.nil?
+
+      ActiveModel::Type::Boolean.new.cast(value) ? true : false
+    end
+
+    # Seconds an unanswered direct call rings before voicemail kicks in.
+    def self.voicemail_timeout_seconds
+      configured = PLUGIN&.dig(:pl_connect_connect, :voicemail_timeout_seconds).to_i
+      configured.positive? ? configured : 30
+    end
+
+    # Maximum length, in seconds, of a single voicemail recording.
+    def self.voicemail_max_duration_seconds
+      configured = PLUGIN&.dig(:pl_connect_connect, :voicemail_max_duration_seconds).to_i
+      configured.positive? ? configured : 120
+    end
+
     # Starts a new call, or joins/returns the one already running in this
     # conversation — a second click on the call button must never create a
     # second, competing PlConnectCallItem, and a group member clicking it
@@ -269,6 +312,7 @@ module PlConnect
       ChatBroadcaster.call_state(chat_item: @chat_item, call_item: call, action: "started")
       _notify_invitee(call, partner)
       composer.create_system(event_key: "call.started", payload: { login: @user.login.to_s }, call_item_uuid: call.uuid)
+      _schedule_voicemail_timeout(call)
 
       { successful: true, successful_text: nil, element: call }
     end
@@ -352,6 +396,21 @@ module PlConnect
       )
     rescue StandardError => e
       Rails.logger.error "PlConnect::CallService#_notify_invitee: #{e.class}: #{e.message}"
+    end
+
+    # Schedules CallVoicemailTimeoutJob to end this (still ringing) direct
+    # call as missed and prompt the caller for a voicemail if nobody answers
+    # in time. The job itself re-checks call.state before doing anything, so
+    # it is a no-op if the call was already accepted/declined/hung up before
+    # it runs - no cancellation bookkeeping is needed here.
+    def _schedule_voicemail_timeout(call)
+      return unless self.class.voicemail_active?
+
+      PlConnect::CallVoicemailTimeoutJob
+        .set(wait: self.class.voicemail_timeout_seconds.seconds)
+        .perform_later(call_uuid: call.uuid)
+    rescue StandardError => e
+      Rails.logger.error "PlConnect::CallService#_schedule_voicemail_timeout: #{e.class}: #{e.message}"
     end
 
     # Notifies every other active member of a group/channel/team conversation

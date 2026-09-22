@@ -13,7 +13,7 @@ import { el, clockTime, initials } from "./dom"
 
 // Reactions offered by the quick picker. Kept short on purpose - a full emoji
 // palette is a separate feature and would need a picker component.
-export const QUICK_REACTIONS = [ "👍", "🎉", "❤️", "😄", "👀", "🙏" ]
+export const QUICK_REACTIONS = ["👍", "🎉", "❤️", "😄", "👀", "🙏"]
 
 export default class MessageRenderer {
   // viewerUuid - uuid of the logged in user, used to align own messages right
@@ -64,9 +64,8 @@ export default class MessageRenderer {
 
   renderAvatar(message, own) {
     return el("span", {
-      class: `flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
-        own ? "bg-primary text-primary-content" : "bg-base-300"
-      }`,
+      class: `flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${own ? "bg-primary text-primary-content" : "bg-base-300"
+        }`,
       text: initials(message.sender_login),
       attrs: { title: message.sender_login || "" }
     })
@@ -84,9 +83,8 @@ export default class MessageRenderer {
 
   renderBubble(message, own) {
     const bubble = el("div", {
-      class: `lexxy-content w-fit max-w-full break-words rounded-2xl px-3 py-2 text-sm ${
-        own ? "bg-primary text-primary-content" : "bg-base-100"
-      }`
+      class: `lexxy-content w-fit max-w-full break-words rounded-2xl px-3 py-2 text-sm ${own ? "bg-primary text-primary-content" : "bg-base-100"
+        }`
     })
 
     // The ONLY innerHTML in the chat UI.
@@ -117,6 +115,25 @@ export default class MessageRenderer {
 
     message.attachments.forEach((attachment) => {
       const href = attachmentUrl(attachment.uuid)
+      // Strip any "; codecs=..." suffix before comparing, mirroring the
+      // defensive parsing AttachmentService#download_content_type already
+      // does server side for the same content_type value.
+      const contentType = String(attachment.content_type || "").split(";")[0].trim()
+
+      if (attachment.inline && contentType.startsWith("audio/")) {
+        // Voicemails and any other recorded/attached audio (see
+        // PlConnectApiController#upload_voicemail) render as an inline
+        // player rather than the generic download-link row below - a
+        // voicemail the recipient cannot play without downloading it first
+        // would defeat the point of the feature.
+        list.appendChild(
+          el("audio", {
+            class: "max-w-full",
+            attrs: { src: href, controls: "", preload: "none" }
+          })
+        )
+        return
+      }
 
       if (attachment.inline) {
         // Inline preview for images. The alt text is the file name and is set
@@ -127,7 +144,7 @@ export default class MessageRenderer {
         })
 
         list.appendChild(
-          el("a", { class: "block", attrs: { href: href, target: "_blank", rel: "noopener" }, children: [ image ] })
+          el("a", { class: "block", attrs: { href: href, target: "_blank", rel: "noopener" }, children: [image] })
         )
         return
       }
@@ -212,7 +229,7 @@ export default class MessageRenderer {
           class: "btn btn-ghost btn-xs px-1",
           attrs: { type: "button", title: this.i18n.edit || "" },
           dataset: { action: "pl-connect-chat#startEdit", plConnectMessageUuid: message.uuid },
-          children: [ el("i", { class: "fa-solid fa-pen text-[10px]", attrs: { "aria-hidden": "true" } }) ]
+          children: [el("i", { class: "fa-solid fa-pen text-[10px]", attrs: { "aria-hidden": "true" } })]
         })
       )
 
@@ -221,7 +238,7 @@ export default class MessageRenderer {
           class: "btn btn-ghost btn-xs px-1 text-error",
           attrs: { type: "button", title: this.i18n.delete || "" },
           dataset: { action: "pl-connect-chat#deleteMessage", plConnectMessageUuid: message.uuid },
-          children: [ el("i", { class: "fa-solid fa-trash text-[10px]", attrs: { "aria-hidden": "true" } }) ]
+          children: [el("i", { class: "fa-solid fa-trash text-[10px]", attrs: { "aria-hidden": "true" } })]
         })
       )
     }

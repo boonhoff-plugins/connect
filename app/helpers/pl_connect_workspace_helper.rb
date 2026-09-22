@@ -80,6 +80,8 @@ module PlConnectWorkspaceHelper
       typing_one: I18n.t("pl_connect.chat.typing_one"),
       typing_many: I18n.t("pl_connect.chat.typing_many"),
       no_results: I18n.t("pl_connect.chat.no_results"),
+      people_heading: I18n.t("pl_connect.chat.people_heading"),
+      messages_heading: I18n.t("pl_connect.chat.messages_heading"),
       load_failed: I18n.t("pl_connect.chat.load_failed"),
       send_failed: I18n.t("pl_connect.chat.send_failed"),
       session_expired: I18n.t("pl_connect.chat.session_expired"),
@@ -125,13 +127,16 @@ module PlConnectWorkspaceHelper
       camera_off: I18n.t("pl_connect.call.camera_off"),
       share_screen: I18n.t("pl_connect.call.share_screen"),
       stop_share: I18n.t("pl_connect.call.stop_share"),
+      expand: I18n.t("pl_connect.call.expand"),
+      collapse: I18n.t("pl_connect.call.collapse"),
       call_ended: I18n.t("pl_connect.call.call_ended"),
       call_declined: I18n.t("pl_connect.call.call_declined"),
       call_missed: I18n.t("pl_connect.call.call_missed"),
       call_failed: I18n.t("pl_connect.call.call_failed"),
       media_error: I18n.t("pl_connect.call.media_error"),
       start_audio_call: I18n.t("pl_connect.call.start_audio_call"),
-      start_video_call: I18n.t("pl_connect.call.start_video_call")
+      start_video_call: I18n.t("pl_connect.call.start_video_call"),
+      recording_voicemail: I18n.t("pl_connect.call.recording_voicemail")
     }
   end
 
@@ -144,6 +149,16 @@ module PlConnectWorkspaceHelper
       no_results: I18n.t("pl_connect.user_picker.no_results"),
       error: I18n.t("pl_connect.user_picker.error"),
       session_expired: I18n.t("pl_connect.chat.session_expired")
+    }
+  end
+
+  # Translated strings for the main-app shell widget's new-message toast (see
+  # extension_shell_widgets/_pl_connect.html.erb and
+  # pl_connect_shell_controller.js). Kept separate from pl_connect_chat_i18n
+  # because the shell widget never mounts pl-connect-chat.
+  def pl_connect_shell_i18n
+    {
+      new_message: I18n.t("pl_connect.shell.new_message")
     }
   end
 end

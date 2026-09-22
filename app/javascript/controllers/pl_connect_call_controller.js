@@ -48,14 +48,15 @@
 // by PlConnect::CallService, not by this controller.
 import { Controller } from "@hotwired/stimulus"
 import plConnectConsumer from "../pl_connect/cable"
-import { ENDPOINTS, apiPost } from "../pl_connect/api"
+import { ENDPOINTS, apiPost, apiUpload } from "../pl_connect/api"
 import { toggle } from "../pl_connect/dom"
+import { createRingbackPlayer, createRingtonePlayer } from "../pl_connect/tone_player"
 
 export default class extends Controller {
     static targets = [
         "incomingBanner", "incomingLabel",
         "activePanel", "statusLabel", "remoteVideos", "localVideo",
-        "audioButton", "videoButton", "screenButton"
+        "audioButton", "videoButton", "screenButton", "expandButton"
     ]
 
     static values = {
@@ -67,7 +68,14 @@ export default class extends Controller {
         // from ?start_call=audio|video after the shared user picker opens/
         // creates a 1:1 chat. Only "audio", "video" or "" - never trusted
         // beyond that (see handleConversationOpened).
-        pending: String
+        pending: String,
+        // PlConnect::CallService.ringtone_active?/.ringback_active? (see
+        // app/views/layouts/pl_connect.html.erb) - whether the synthesised
+        // tones (tone_player.js) play at all. Recording a voicemail is not
+        // gated by a value here: it is driven entirely by whether the server
+        // ever broadcasts "voicemail_start" (see PlConnect::CallService.voicemail_active?).
+        ringtoneActive: Boolean,
+        ringbackActive: Boolean
     }
 
     connect() {
@@ -82,6 +90,25 @@ export default class extends Controller {
         this.audioActive = true
         this.videoActive = false
         this.screenActive = false
+        // Docked (small, bottom-right corner) is the default so the call does
+        // not block the conversation underneath it; toggleExpand() swaps in
+        // the near-fullscreen classes instead, read from the elements' own
+        // data-*-docked-class/-expanded-class attributes (see
+        // app/views/layouts/pl_connect.html.erb) so the actual Tailwind
+        // classes live in the view, not hardcoded in this controller.
+        this.expanded = false
+
+        this.ringtonePlayer = createRingtonePlayer()
+        this.ringbackPlayer = createRingbackPlayer()
+        // True while this device placed an outgoing direct call that is still
+        // ringing - the only situation in which a "call.missed" chat-stream
+        // event should be held back briefly instead of tearing the session
+        // down immediately (see handleCallEvent).
+        this.awaitingVoicemail = false
+        this.voicemailFallbackTimer = null
+        this.mediaRecorder = null
+        this.voicemailChunks = []
+        this.voicemailStopTimer = null
 
         this.onInvite = (event) => this.handleInvite(event)
         this.onCallEvent = (event) => this.handleCallEvent(event)
@@ -95,6 +122,7 @@ export default class extends Controller {
         document.removeEventListener("pl-connect:call-invite", this.onInvite)
         document.removeEventListener("pl-connect:call-event", this.onCallEvent)
         document.removeEventListener("pl-connect:conversation-opened", this.onConversationOpened)
+        this.ringtonePlayer.stop()
         this.teardownCall()
     }
 
@@ -152,6 +180,7 @@ export default class extends Controller {
             this.incomingLabelTarget.textContent = template.replace("%{login}", payload.caller_login || "")
         }
         toggle(this.incomingBannerTarget, true)
+        if (this.ringtoneActiveValue) this.ringtonePlayer.start()
     }
 
     async acceptIncoming() {
@@ -178,6 +207,7 @@ export default class extends Controller {
 
     dismissIncoming() {
         this.incomingInvite = null
+        this.ringtonePlayer.stop()
         toggle(this.incomingBannerTarget, false)
     }
 
@@ -206,8 +236,22 @@ export default class extends Controller {
         if (this.hasLocalVideoTarget) this.localVideoTarget.srcObject = this.localStream
         this.renderMediaButtons()
 
+        // Every call starts docked (small), regardless of how the previous one
+        // was left - toggleExpand() only affects the call currently running.
+        this.expanded = false
+        this._applySizeClasses(this.activePanelTarget)
+        if (this.hasLocalVideoTarget) this._applySizeClasses(this.localVideoTarget)
+        if (this.hasExpandButtonTarget) this.expandButtonTarget.title = this.i18nValue.expand
+
         if (this.hasStatusLabelTarget) this.statusLabelTarget.textContent = this.i18nValue.connecting
         toggle(this.activePanelTarget, true)
+
+        // call.state is only "ringing" here for the initiator of a direct call
+        // that has not been answered yet - answer_call already transitions the
+        // call to "active" before returning (see CallService#accept), so the
+        // callee's own beginSession() never sees "ringing".
+        this.awaitingVoicemail = call.state === "ringing"
+        if (this.awaitingVoicemail && this.ringbackActiveValue) this.ringbackPlayer.start()
 
         this.subscribeCallChannel(call.uuid)
     }
@@ -245,6 +289,10 @@ export default class extends Controller {
             }
             case "signal": {
                 await this.handleRemoteSignal(payload)
+                break
+            }
+            case "voicemail_start": {
+                this.startVoicemailRecording(payload)
                 break
             }
             default:
@@ -290,7 +338,10 @@ export default class extends Controller {
         const video = document.createElement("video")
         video.autoplay = true
         video.playsInline = true
-        video.className = "aspect-video w-full rounded bg-black object-cover"
+        // object-contain rather than object-cover: a shared screen can have any
+        // aspect ratio, and cropping its edges to fill the tile can hide
+        // exactly the content the other side is trying to show.
+        video.className = "h-full max-h-full w-full rounded bg-black object-contain"
         video.dataset.peerUuid = peerUuid
         if (this.hasRemoteVideosTarget) this.remoteVideosTarget.appendChild(video)
         if (peer) peer.videoEl = video
@@ -344,6 +395,74 @@ export default class extends Controller {
 
     sendSignal(message) {
         this.callSubscription?.perform("signal", message)
+    }
+
+    // --- voicemail -----------------------------------------------------------
+
+    // Triggered by the "voicemail_start" call-stream event, broadcast by
+    // PlConnect::CallVoicemailTimeoutJob once it has ended this unanswered
+    // call as missed. Records the caller's own microphone track only (no
+    // video - there is no remote party to see it) via MediaRecorder;
+    // uploading and tearing down happens in finishVoicemail once recording
+    // stops, either automatically (max_duration_seconds) or via #hangup.
+    startVoicemailRecording(payload) {
+        if (this.voicemailFallbackTimer) clearTimeout(this.voicemailFallbackTimer)
+        this.voicemailFallbackTimer = null
+        this.awaitingVoicemail = false
+
+        const audioTracks = this.localStream?.getAudioTracks() || []
+        if (audioTracks.length === 0 || typeof MediaRecorder === "undefined") {
+            this.teardownCall()
+            return
+        }
+
+        this.voicemailChunks = []
+
+        try {
+            this.mediaRecorder = new MediaRecorder(new MediaStream(audioTracks))
+        } catch (e) {
+            this.teardownCall()
+            return
+        }
+
+        this.mediaRecorder.ondataavailable = (event) => {
+            if (event.data && event.data.size > 0) this.voicemailChunks.push(event.data)
+        }
+        this.mediaRecorder.onstop = () => this.finishVoicemail()
+        this.mediaRecorder.start()
+
+        if (this.hasStatusLabelTarget) this.statusLabelTarget.textContent = this.i18nValue.recording_voicemail
+
+        const maxMs = (Number(payload?.max_duration_seconds) || 120) * 1000
+        this.voicemailStopTimer = setTimeout(() => this.stopVoicemailRecording(), maxMs)
+    }
+
+    stopVoicemailRecording() {
+        if (this.voicemailStopTimer) clearTimeout(this.voicemailStopTimer)
+        this.voicemailStopTimer = null
+
+        if (this.mediaRecorder && this.mediaRecorder.state !== "inactive") this.mediaRecorder.stop()
+    }
+
+    // MediaRecorder's onstop handler - uploads whatever was captured (even a
+    // partial recording, e.g. #hangup was used to finish early) as a plain
+    // chat message attachment (see PlConnectApiController#upload_voicemail),
+    // then tears the call panel down. chatUuid is read before teardownCall()
+    // clears it (see #resetState).
+    async finishVoicemail() {
+        const chunks = this.voicemailChunks
+        this.voicemailChunks = []
+        const chatUuid = this.chatUuid
+        this.teardownCall()
+
+        if (chunks.length === 0) return
+
+        const blob = new Blob(chunks, { type: "audio/webm" })
+        const formData = new FormData()
+        formData.append("chat_uuid", chatUuid)
+        formData.append("file", blob, "voicemail.webm")
+
+        await apiUpload(ENDPOINTS.uploadVoicemail, formData)
     }
 
     // --- controls --------------------------------------------------------------
@@ -424,7 +543,16 @@ export default class extends Controller {
         }))
     }
 
+    // Ends the call normally, or - while a voicemail is being recorded (see
+    // startVoicemailRecording) - stops and sends the recording instead. Same
+    // button, same action, so the person leaving a message never has to find
+    // a second control: hanging up IS how a voicemail is finished early.
     async hangup() {
+        if (this.mediaRecorder && this.mediaRecorder.state !== "inactive") {
+            this.stopVoicemailRecording()
+            return
+        }
+
         if (!this.callUuid) return
 
         const chatUuid = this.chatUuid
@@ -462,6 +590,35 @@ export default class extends Controller {
         target.title = active ? activeTitle : inactiveTitle
     }
 
+    // --- panel size ---------------------------------------------------------
+
+    // Switches the call panel between the small, docked corner widget (default,
+    // does not block the conversation underneath) and a near-fullscreen size
+    // for when the remote person or a shared screen needs to actually be
+    // legible. Both variants are read from data attributes on the elements
+    // themselves rather than hardcoded here, so the exact Tailwind classes stay
+    // next to the markup they apply to.
+    toggleExpand() {
+        this.expanded = !this.expanded
+
+        this._applySizeClasses(this.activePanelTarget)
+        if (this.hasLocalVideoTarget) this._applySizeClasses(this.localVideoTarget)
+
+        if (this.hasExpandButtonTarget) {
+            this.expandButtonTarget.querySelector("i")?.classList.toggle("fa-expand", !this.expanded)
+            this.expandButtonTarget.querySelector("i")?.classList.toggle("fa-compress", this.expanded)
+            this.expandButtonTarget.title = this.expanded ? this.i18nValue.collapse : this.i18nValue.expand
+        }
+    }
+
+    _applySizeClasses(element) {
+        const docked = element.dataset.plConnectCallDockedClass
+        const expandedClasses = element.dataset.plConnectCallExpandedClass
+        if (!docked || !expandedClasses) return
+
+        element.className = this.expanded ? expandedClasses : docked
+    }
+
     // --- lifecycle from the chat stream ----------------------------------------
 
     // call.started/accepted/declined/left/ended/missed - broadcast on the chat
@@ -480,6 +637,8 @@ export default class extends Controller {
 
         switch (payload.event) {
             case "call.accepted":
+                this.ringbackPlayer.stop()
+                this.awaitingVoicemail = false
                 if (this.hasStatusLabelTarget) this.statusLabelTarget.textContent = this.i18nValue.connected
                 break
             case "call.declined":
@@ -490,7 +649,19 @@ export default class extends Controller {
                 break
             case "call.missed":
             case "call.ended":
-                this.teardownCall()
+                if (payload.event === "call.missed" && this.awaitingVoicemail) {
+                    // PlConnect::CallVoicemailTimeoutJob also broadcasts
+                    // "voicemail_start" on the call's own signalling stream - a
+                    // separate ActionCable broadcast with no ordering guarantee
+                    // relative to this chat-stream event. Give it a brief moment
+                    // to arrive instead of tearing the session down immediately,
+                    // which would stop the microphone track a recording needs.
+                    this.ringbackPlayer.stop()
+                    if (this.hasStatusLabelTarget) this.statusLabelTarget.textContent = this.i18nValue.call_missed
+                    this.voicemailFallbackTimer = setTimeout(() => this.teardownCall(), 4000)
+                } else {
+                    this.teardownCall()
+                }
                 break
             default:
                 break
@@ -500,6 +671,27 @@ export default class extends Controller {
     // --- teardown ---------------------------------------------------------------
 
     teardownCall() {
+        if (this.voicemailFallbackTimer) clearTimeout(this.voicemailFallbackTimer)
+        this.voicemailFallbackTimer = null
+
+        if (this.voicemailStopTimer) clearTimeout(this.voicemailStopTimer)
+        this.voicemailStopTimer = null
+
+        // Only reached here for teardowns other than the normal "hang up while
+        // recording" path (that one goes through stopVoicemailRecording, whose
+        // onstop handler already delivered the recording before this ever
+        // runs) - e.g. the controller itself disconnecting mid-recording.
+        // Discarding an unsent partial recording is the safe choice there: the
+        // page is going away regardless.
+        if (this.mediaRecorder && this.mediaRecorder.state !== "inactive") {
+            this.mediaRecorder.onstop = null
+            this.mediaRecorder.stop()
+        }
+        this.mediaRecorder = null
+        this.voicemailChunks = []
+
+        this.ringbackPlayer.stop()
+
         this.callSubscription?.unsubscribe()
         this.callSubscription = null
 
@@ -525,6 +717,8 @@ export default class extends Controller {
         this.audioActive = true
         this.videoActive = false
         this.screenActive = false
+        this.expanded = false
+        this.awaitingVoicemail = false
     }
 
     // Minimal, dependency free notification. The workspace has no toast system

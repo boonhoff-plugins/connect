@@ -36,7 +36,8 @@ export const ENDPOINTS = {
   startCall: "/pl_connect_api/start_call",
   answerCall: "/pl_connect_api/answer_call",
   hangupCall: "/pl_connect_api/hangup_call",
-  callMediaState: "/pl_connect_api/call_media_state"
+  callMediaState: "/pl_connect_api/call_media_state",
+  uploadVoicemail: "/pl_connect_api/upload_voicemail"
 }
 
 export function csrfToken() {
@@ -54,7 +55,7 @@ export function attachmentUrl(uuid) {
 export async function apiGet(path, params = {}) {
   const url = new URL(path, window.location.origin)
 
-  Object.entries(params).forEach(([ key, value ]) => {
+  Object.entries(params).forEach(([key, value]) => {
     if (value === null || value === undefined || value === "") return
 
     // Rails expects repeated "key[]" parameters for arrays.

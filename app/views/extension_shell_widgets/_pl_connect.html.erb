@@ -1,0 +1,59 @@
+<%#
+  Main-app shell widget for the Connect plugin - see
+  system/lib/boonhoff/extension_shell_widgets.rb and
+  system/app/views/common/_fragment_extension_shell_widgets.html.erb for the
+  generic hook this plugs into.
+
+  Purpose: reach the user with incoming-call and new-message notifications
+  while they are on an ordinary page of the main application, not just while
+  the full Connect workspace (pl_connect_workspace_controller) is open.
+
+  Scope, deliberately narrower than the workspace layout:
+    * pl-connect-call is mounted so an incoming call can be answered AND
+      conducted right here (acceptIncoming -> beginSession does not depend on
+      the chat controller - only starting a NEW outgoing call does, via
+      chatController.chatUuid, which is why pl-connect-call-pending-value is
+      never set here: there is no pending "start_call" deep link outside the
+      workspace).
+    * pl-connect-chat is intentionally NOT mounted - it expects the full
+      workspace DOM (conversation list, message pane, search field) that does
+      not exist on a regular page.
+    * pl-connect-shell instead listens for the "conversation activity" event
+      pl-connect-presence already dispatches and turns it into a toast that
+      deep-links into the workspace on click (chat_element?chat=<uuid>);
+      PlConnectWorkspaceController#_resolve_initial_chat re-validates
+      membership server-side, so an arbitrary uuid cannot be used to peek into
+      someone else's conversation.
+
+  Guards (all three required, evaluated in the partial itself - the generic
+  hook does not know or enforce any plugin's activation conditions):
+    - a logged-in user is present
+    - the same role check permission? applies to the workspace controller
+      itself (PermissionControllerConcern#user_has_permission?), so a user who
+      is not allowed into the workspace does not even get a WebSocket
+      subscription attempt for it
+    - the presence feature is enabled at all (PlConnect::PresenceService.active?)
+%>
+<% viewer = session[:user] %>
+<% if viewer.present? &&
+    viewer.has_role?(roles: %w[plugin_pl_connect_workspace tenant_pl_connect_workspace pl_connect_workspace]) &&
+    PlConnect::PresenceService.active? %>
+  <div id="pl_connect_shell_widget"
+       data-turbo-permanent
+       data-controller="pl-connect-presence pl-connect-call pl-connect-shell"
+       data-pl-connect-presence-active-value="true"
+       data-pl-connect-presence-i18n-value="<%= pl_connect_presence_i18n.to_json %>"
+       data-pl-connect-call-active-value="<%= PlConnect::CallService.active? ? "true" : "false" %>"
+       data-pl-connect-call-viewer-uuid-value="<%= viewer.uuid %>"
+       data-pl-connect-call-i18n-value="<%= pl_connect_call_i18n.to_json %>"
+       data-pl-connect-call-ice-servers-value="<%= PlConnect::CallService.ice_servers.to_json %>"
+       data-pl-connect-shell-i18n-value="<%= pl_connect_shell_i18n.to_json %>">
+    <%= render "pl_connect_workspace/call_overlay" %>
+
+    <%# Toast container for new-message notifications - populated at runtime
+        by pl_connect_shell_controller.js, never server-rendered, since a
+        toast only ever reacts to a live "conversation.activity" broadcast. %>
+    <div data-pl-connect-shell-target="toasts"
+         class="fixed inset-x-0 top-4 z-50 flex flex-col items-center gap-2 sm:inset-x-auto sm:right-4 sm:items-end"></div>
+  </div>
+<% end %>

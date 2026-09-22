@@ -119,31 +119,24 @@ class PlConnectApiController < ApplicationController
   end
 
   # GET /pl_connect_api/search
-  # Full text search over the plain text column.
+  # Full text search over the plain text column, plus a people lookup so the
+  # single top bar search field can cover both "search_placeholder" promises
+  # (messages and people) instead of only the former.
   #
-  # The scope is restricted to the caller's own conversations *before* the LIKE
-  # is applied, so the search can never surface a message from a conversation
-  # the caller is not a member of.
+  # The message scope is restricted to the caller's own conversations *before*
+  # the LIKE is applied, so the search can never surface a message from a
+  # conversation the caller is not a member of. The people lookup reuses
+  # ConversationResolver#searchable_users, i.e. the same tenant-scoped,
+  # capped candidate list as the "new chat" user picker - it cannot be used to
+  # enumerate the whole user table either.
   def search
     term = params[:term].to_s.strip
-    return render json: { successful: true, messages: [] } if term.length < 2
-
-    chat_uuids = resolver.list(archived: true).pluck(:uuid) | resolver.list.pluck(:uuid)
-    return render json: { successful: true, messages: [] } if chat_uuids.empty?
-
-    # LIKE with a bound, escaped pattern: portable across MySQL, PostgreSQL and
-    # SQLite. ILIKE would be PostgreSQL only, REGEXP MySQL only.
-    pattern = "%#{term.gsub("\\", "\\\\\\\\").gsub("%", "\\%").gsub("_", "\\_")}%"
-
-    hits = PlConnectChatMessageItem
-           .where(chat_item_uuid: chat_uuids, del_flag: false, f_type: "message")
-           .where("LOWER(body_plain) LIKE LOWER(:p)", p: pattern)
-           .order(sent_at: :desc).limit(50)
-           .includes(:sender, :reactions, :attachments)
+    return render json: { successful: true, messages: [], people: [] } if term.length < 2
 
     render json: {
       successful: true,
-      messages: hits.map { |m| PlConnect::MessageSerializer.as_json(message: m, viewer: current_chat_user) }
+      messages: _search_messages(term),
+      people: _search_people(term)
     }
   rescue StandardError => e
     _render_exception(e, "search")
@@ -396,6 +389,36 @@ class PlConnectApiController < ApplicationController
     _render_exception(e, "upload_attachment")
   end
 
+  # POST /pl_connect_api/upload_voicemail
+  #
+  # Delivers a recording made after CallVoicemailTimeoutJob ended an
+  # unanswered direct call and prompted the caller (see
+  # pl_connect_call_controller.js#startVoicemailRecording). The recording is
+  # NOT a call system message: it is created here as a completely ordinary
+  # chat message (a fixed, localised caption body) with an audio attachment,
+  # so it renders and downloads exactly like any other voice attachment - see
+  # message_renderer.js, which never renders attachments for "call_event"/
+  # "system" messages.
+  def upload_voicemail
+    chat = resolver.find(params[:chat_uuid])
+    return _render_not_found if chat.blank?
+
+    create_result = composer(chat).create(body: I18n.t("pl_connect.chat.voicemail_caption"))
+    return _render_failure(create_result[:successful_text]) unless create_result[:successful]
+
+    message = create_result[:element]
+    service = PlConnect::AttachmentService.new(c: @c, user: current_chat_user)
+    attach_result = service.attach(chat_item: chat, message: message, uploaded_file: params[:file])
+    return _render_failure(attach_result[:successful_text]) unless attach_result[:successful]
+
+    render json: {
+      successful: true,
+      message: PlConnect::MessageSerializer.as_json(message: message.reload, viewer: current_chat_user)
+    }
+  rescue StandardError => e
+    _render_exception(e, "upload_voicemail")
+  end
+
   # GET /pl_connect_api/download_attachment
   #
   # The only way to get an attachment's bytes. Membership is re-checked here on
@@ -479,6 +502,34 @@ class PlConnectApiController < ApplicationController
 
   def _cursor_message(chat)
     _find_message(chat, params[:before_uuid])
+  end
+
+  # Message half of the top bar search. Scoped to the caller's own
+  # conversations (archived included) before the LIKE is applied.
+  def _search_messages(term)
+    chat_uuids = resolver.list(archived: true).pluck(:uuid) | resolver.list.pluck(:uuid)
+    return [] if chat_uuids.empty?
+
+    # LIKE with a bound, escaped pattern: portable across MySQL, PostgreSQL and
+    # SQLite. ILIKE would be PostgreSQL only, REGEXP MySQL only.
+    pattern = "%#{term.gsub("\\", "\\\\\\\\").gsub("%", "\\%").gsub("_", "\\_")}%"
+
+    hits = PlConnectChatMessageItem
+           .where(chat_item_uuid: chat_uuids, del_flag: false, f_type: "message")
+           .where("LOWER(body_plain) LIKE LOWER(:p)", p: pattern)
+           .order(sent_at: :desc).limit(50)
+           .includes(:sender, :reactions, :attachments)
+
+    hits.map { |m| PlConnect::MessageSerializer.as_json(message: m, viewer: current_chat_user) }
+  end
+
+  # People half of the top bar search. Reuses the same tenant-scoped, capped
+  # candidate list as the "new chat" user picker (see #users below) so a
+  # colleague found here can be opened into a direct chat the same way.
+  def _search_people(term)
+    resolver.searchable_users(term: term, limit: 8).map do |user|
+      { uuid: user.uuid, login: user.login.to_s, title: user.try(:full_name).to_s }
+    end
   end
 
   # Always scoped to the conversation, mirroring _find_message — a call uuid

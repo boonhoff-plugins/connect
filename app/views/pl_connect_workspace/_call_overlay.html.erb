@@ -1,0 +1,81 @@
+<%#
+  Call overlay: incoming-call banner + active-call panel.
+
+  Extracted from the plain <div> markup that used to live inline in
+  layouts/pl_connect.html.erb so the SAME markup can also be rendered by
+  extension_shell_widgets/_pl_connect.html.erb (the main-app shell widget) -
+  without the two copies drifting apart, which was exactly the class of bug
+  fixed earlier for the join-history unique index.
+
+  Requires pl-connect-call (and, for the incoming banner styling context,
+  nothing else) to already be mounted on an ancestor element - this partial
+  only renders targets, it does not open the data-controller wrapper itself.
+%>
+<%# Incoming-call banner - shown regardless of which section/conversation
+    is currently open, fed by the presence stream (PlConnectPresenceChannel
+    "call.invite"), never by the chat stream. %>
+<div data-pl-connect-call-target="incomingBanner"
+     class="hidden fixed inset-x-0 top-4 z-50 mx-auto w-full max-w-sm rounded-box bg-base-100 p-4 shadow-xl ring-1 ring-base-300">
+  <div class="flex items-center gap-3">
+    <i class="fa-solid fa-phone-volume text-primary" aria-hidden="true"></i>
+    <p class="min-w-0 flex-1 truncate text-sm font-semibold" data-pl-connect-call-target="incomingLabel"></p>
+  </div>
+  <div class="mt-3 flex justify-end gap-2">
+    <button type="button" class="btn btn-error btn-sm" data-action="pl-connect-call#declineIncoming">
+      <i class="fa-solid fa-phone-slash" aria-hidden="true"></i>
+    </button>
+    <button type="button" class="btn btn-success btn-sm" data-action="pl-connect-call#acceptIncoming">
+      <i class="fa-solid fa-phone" aria-hidden="true"></i>
+    </button>
+  </div>
+</div>
+
+<%# Active-call panel - local/remote video plus the mute/camera/screen/
+    hangup controls. Positioned as a floating overlay rather than
+    replacing the message pane, so the conversation stays usable (e.g. to
+    keep typing) while a call is running.
+
+    Starts docked small (bottom-right corner) so it does not block the
+    conversation; the expand button (pl-connect-call#toggleExpand)
+    switches it to a near-fullscreen panel for when the person or a
+    shared screen needs to actually be readable. Both size variants are
+    plain Tailwind utility classes swapped by the controller - no custom
+    CSS. %>
+<div data-pl-connect-call-target="activePanel"
+     data-pl-connect-call-docked-class="fixed inset-x-4 bottom-4 z-40 flex flex-col gap-2 rounded-box bg-base-100 p-3 shadow-xl ring-1 ring-base-300 sm:inset-x-auto sm:right-4 sm:w-[28rem]"
+     data-pl-connect-call-expanded-class="fixed inset-4 z-40 flex flex-col gap-2 rounded-box bg-base-100 p-4 shadow-xl ring-1 ring-base-300 sm:inset-8"
+     class="hidden fixed inset-x-4 bottom-4 z-40 flex flex-col gap-2 rounded-box bg-base-100 p-3 shadow-xl ring-1 ring-base-300 sm:inset-x-auto sm:right-4 sm:w-[28rem]">
+  <div class="flex items-center justify-between gap-2">
+    <p class="min-w-0 flex-1 truncate text-sm font-semibold" data-pl-connect-call-target="statusLabel"></p>
+    <button type="button" class="btn btn-circle btn-ghost btn-xs" data-action="pl-connect-call#toggleExpand" data-pl-connect-call-target="expandButton">
+      <i class="fa-solid fa-expand" aria-hidden="true"></i>
+    </button>
+  </div>
+  <div class="relative flex-1 overflow-hidden rounded-box bg-black">
+    <%# One <video> per remote participant is appended here at runtime by
+        pl_connect_call_controller.js (see _getOrCreateRemoteVideo) - a
+        1:1 call simply ends up with a single tile, additional
+        participants wrap into further grid columns. object-contain
+        (not object-cover, set in the controller) keeps a shared screen
+        fully visible instead of cropping its edges to fill the tile. %>
+    <div data-pl-connect-call-target="remoteVideos" class="grid h-full grid-cols-2 place-content-center gap-1 empty:grid-cols-1"></div>
+    <video data-pl-connect-call-target="localVideo"
+           data-pl-connect-call-docked-class="absolute bottom-2 right-2 h-16 w-24 rounded border border-base-100 bg-black object-cover"
+           data-pl-connect-call-expanded-class="absolute bottom-3 right-3 h-32 w-48 rounded border border-base-100 bg-black object-cover"
+           class="absolute bottom-2 right-2 h-16 w-24 rounded border border-base-100 bg-black object-cover" autoplay playsinline muted></video>
+  </div>
+  <div class="flex justify-center gap-2">
+    <button type="button" class="btn btn-circle btn-sm" data-action="pl-connect-call#toggleAudio" data-pl-connect-call-target="audioButton">
+      <i class="fa-solid fa-microphone" aria-hidden="true"></i>
+    </button>
+    <button type="button" class="btn btn-circle btn-sm" data-action="pl-connect-call#toggleVideo" data-pl-connect-call-target="videoButton">
+      <i class="fa-solid fa-video" aria-hidden="true"></i>
+    </button>
+    <button type="button" class="btn btn-circle btn-sm" data-action="pl-connect-call#toggleScreen" data-pl-connect-call-target="screenButton">
+      <i class="fa-solid fa-display" aria-hidden="true"></i>
+    </button>
+    <button type="button" class="btn btn-circle btn-sm btn-error" data-action="pl-connect-call#hangup">
+      <i class="fa-solid fa-phone-slash" aria-hidden="true"></i>
+    </button>
+  </div>
+</div>

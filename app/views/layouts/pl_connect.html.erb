@@ -106,6 +106,8 @@
          data-pl-connect-call-i18n-value="<%= pl_connect_call_i18n.to_json %>"
          data-pl-connect-call-ice-servers-value="<%= PlConnect::CallService.ice_servers.to_json %>"
          data-pl-connect-call-pending-value="<%= @c[:pl_connect_pending_call] %>"
+         data-pl-connect-call-ringtone-active-value="<%= PlConnect::CallService.ringtone_active? ? "true" : "false" %>"
+         data-pl-connect-call-ringback-active-value="<%= PlConnect::CallService.ringback_active? ? "true" : "false" %>"
          data-pl-connect-user-picker-i18n-value="<%= pl_connect_user_picker_i18n.to_json %>">
       <%= render "pl_connect_workspace/rail" %>
 
@@ -117,54 +119,9 @@
         </main>
       </div>
 
-      <%# Incoming-call banner - shown regardless of which section/conversation
-          is currently open, fed by the presence stream (PlConnectPresenceChannel
-          "call.invite"), never by the chat stream. %>
-      <div data-pl-connect-call-target="incomingBanner"
-           class="hidden fixed inset-x-0 top-4 z-50 mx-auto w-full max-w-sm rounded-box bg-base-100 p-4 shadow-xl ring-1 ring-base-300">
-        <div class="flex items-center gap-3">
-          <i class="fa-solid fa-phone-volume text-primary" aria-hidden="true"></i>
-          <p class="min-w-0 flex-1 truncate text-sm font-semibold" data-pl-connect-call-target="incomingLabel"></p>
-        </div>
-        <div class="mt-3 flex justify-end gap-2">
-          <button type="button" class="btn btn-error btn-sm" data-action="pl-connect-call#declineIncoming">
-            <i class="fa-solid fa-phone-slash" aria-hidden="true"></i>
-          </button>
-          <button type="button" class="btn btn-success btn-sm" data-action="pl-connect-call#acceptIncoming">
-            <i class="fa-solid fa-phone" aria-hidden="true"></i>
-          </button>
-        </div>
-      </div>
-
-      <%# Active-call panel - local/remote video plus the mute/camera/screen/
-          hangup controls. Positioned as a floating overlay rather than
-          replacing the message pane, so the conversation stays usable (e.g. to
-          keep typing) while a call is running. %>
-      <div data-pl-connect-call-target="activePanel"
-           class="hidden fixed inset-x-4 bottom-4 z-40 flex flex-col gap-2 rounded-box bg-base-100 p-3 shadow-xl ring-1 ring-base-300 sm:inset-x-auto sm:right-4 sm:w-[28rem]">
-        <p class="truncate text-sm font-semibold" data-pl-connect-call-target="statusLabel"></p>
-        <div class="relative overflow-hidden rounded-box bg-black">
-          <%# One <video> per remote participant is appended here at runtime by
-              pl_connect_call_controller.js (see _getOrCreateRemoteVideo) - a
-              1:1 call simply ends up with a single tile. %>
-          <div data-pl-connect-call-target="remoteVideos" class="grid grid-cols-2 gap-1 empty:grid-cols-1"></div>
-          <video data-pl-connect-call-target="localVideo" class="absolute bottom-2 right-2 h-16 w-24 rounded border border-base-100 bg-black" autoplay playsinline muted></video>
-        </div>
-        <div class="flex justify-center gap-2">
-          <button type="button" class="btn btn-circle btn-sm" data-action="pl-connect-call#toggleAudio" data-pl-connect-call-target="audioButton">
-            <i class="fa-solid fa-microphone" aria-hidden="true"></i>
-          </button>
-          <button type="button" class="btn btn-circle btn-sm" data-action="pl-connect-call#toggleVideo" data-pl-connect-call-target="videoButton">
-            <i class="fa-solid fa-video" aria-hidden="true"></i>
-          </button>
-          <button type="button" class="btn btn-circle btn-sm" data-action="pl-connect-call#toggleScreen" data-pl-connect-call-target="screenButton">
-            <i class="fa-solid fa-display" aria-hidden="true"></i>
-          </button>
-          <button type="button" class="btn btn-circle btn-sm btn-error" data-action="pl-connect-call#hangup">
-            <i class="fa-solid fa-phone-slash" aria-hidden="true"></i>
-          </button>
-        </div>
-      </div>
+      <%# Incoming-call banner + active-call panel - shared with the main-app
+          shell widget, see pl_connect_workspace/_call_overlay.html.erb. %>
+      <%= render "pl_connect_workspace/call_overlay" %>
 
       <%#
         Shared "pick a colleague" modal used by both the conversation sidebar's
