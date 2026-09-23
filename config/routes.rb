@@ -58,3 +58,13 @@ get "pl_connect_workspace/index_element"    => "pl_connect_workspace#index_eleme
 get "pl_connect_workspace/chat_element"     => "pl_connect_workspace#chat_element",     as: :pl_connect_workspace_chat
 get "pl_connect_workspace/calendar_element" => "pl_connect_workspace#calendar_element", as: :pl_connect_workspace_calendar
 get "pl_connect_workspace/call_element"     => "pl_connect_workspace#call_element",     as: :pl_connect_workspace_call
+
+# --- Calendar meeting join link ---------------------------------------------
+#
+# Resolves the internal "Join meeting" link auto-inserted into a CalendarItem's
+# meeting_url (and description) when meeting_active is enabled into an actual
+# Connect conversation (see PlConnectCalendarMeetingController#join and
+# PlConnect::CalendarItemMeetingConcern#ensure_meeting_chat). Kept at the same
+# url path the core system used to serve before this feature moved into the
+# plugin, so meeting_url values generated before the move keep working.
+get "calendar_item/join_meeting/:uuid" => "pl_connect_calendar_meeting#join", as: :calendar_item_join_meeting

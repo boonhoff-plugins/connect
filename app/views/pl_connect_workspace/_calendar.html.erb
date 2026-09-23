@@ -12,6 +12,14 @@
 %>
 <% dom_id = local_assigns.fetch(:dom_id, "pl_connect_calendar") %>
 
+<%# See extensions/plugins/connect/app/views/extension_shell_widgets/
+    _pl_connect_calendar_meeting_i18n.html.erb for the CORE-page equivalent of
+    this meta tag - that partial is auto-rendered on core pages via the
+    application layout, but this workspace's own layout
+    (layouts/pl_connect.html.erb) does not include that fragment, so the
+    plugin's own view here carries it directly instead. %>
+<meta name="pl-connect-calendar-join-meeting-label" content="<%= I18n.t('pl_connect.calendar.join_meeting') %>">
+
 <div class="flex h-full min-h-0 flex-col bg-base-100">
   <div class="flex shrink-0 items-center justify-between gap-2 border-b border-base-300 px-4 py-2">
     <h2 class="text-sm font-semibold">

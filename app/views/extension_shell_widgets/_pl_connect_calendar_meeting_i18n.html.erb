@@ -1,0 +1,12 @@
+<%#
+  Carries the "Join meeting" icon's i18n label into the DOM for
+  pl_connect_calendar_meeting_controller.js to read, without the CORE
+  event-calendar view/controller ever needing to know this label exists (see
+  system/lib/boonhoff/extension_shell_widgets.rb for how this partial gets
+  auto-discovered and rendered on every core page that uses the main
+  application layout).
+
+  Rendered once per page load; a single global meta tag is enough since the
+  label text does not vary per calendar event.
+%>
+<meta name="pl-connect-calendar-join-meeting-label" content="<%= I18n.t('pl_connect.calendar.join_meeting') %>">

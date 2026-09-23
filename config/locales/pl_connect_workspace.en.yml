@@ -27,6 +27,8 @@ en:
       away: "Away"
       busy: "Busy"
       offline: "Offline"
+    calendar:
+      join_meeting: "Join meeting"
     chat:
       conversations: "Conversations"
       new_conversation: "New conversation"

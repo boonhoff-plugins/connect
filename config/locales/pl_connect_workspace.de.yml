@@ -27,6 +27,8 @@ de:
       away: "Abwesend"
       busy: "Beschäftigt"
       offline: "Offline"
+    calendar:
+      join_meeting: "Am Meeting teilnehmen"
     chat:
       conversations: "Unterhaltungen"
       new_conversation: "Neue Unterhaltung"
