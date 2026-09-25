@@ -110,13 +110,14 @@ module PlConnect
     end
 
     # Maximum number of participants allowed in a mesh call, administrable via
-    # the same "safe default, LookupItem creation deferred" precedent as
-    # .ice_servers above. Never exceeds PlConnectCallItem::MESH_PARTICIPANT_LIMIT
-    # regardless of what is configured - that constant is a technical ceiling
-    # (n*(n-1) peer connections), not a policy the configuration is allowed to
-    # raise.
+    # the "webrtc_mesh_participant_limit" LookupItem (lookup_item 3699/
+    # pl_connect_connect, see AddPlConnectMeshParticipantLimitLookupItem /
+    # MovePlConnectMeshLimitToConnectGroup). Never exceeds
+    # PlConnectCallItem::MESH_PARTICIPANT_LIMIT regardless of what is
+    # configured - that constant is a technical ceiling (n*(n-1) peer
+    # connections), not a policy the configuration is allowed to raise.
     def self.mesh_participant_limit
-      configured = PLUGIN&.dig(:pl_connect_chat_item, :webrtc_mesh_participant_limit).to_i
+      configured = PLUGIN&.dig(:pl_connect_connect, :webrtc_mesh_participant_limit).to_i
       configured = PlConnectCallItem::MESH_PARTICIPANT_LIMIT if configured <= 0
       [ configured, PlConnectCallItem::MESH_PARTICIPANT_LIMIT ].min
     end

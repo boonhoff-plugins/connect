@@ -17,9 +17,13 @@ class PlConnectCallItem < ApplicationRecord
   F_TYPES = %w[direct_call conference screen_share].freeze
   STATES  = %w[ringing active ended missed declined].freeze
 
-  # A plain WebRTC mesh needs n*(n-1) peer connections. Beyond roughly four
-  # participants an SFU is required, so the mesh is capped here.
-  MESH_PARTICIPANT_LIMIT = 4
+  # A plain WebRTC mesh needs n*(n-1) peer connections, so each participant's
+  # browser maintains one direct connection to every other participant. 8 is
+  # already a stretch for a video call (7 simultaneous up/downloads each) and
+  # is really only comfortable for audio-only conferences; anything close to
+  # real 20+ person support needs a media server (SFU) relaying streams
+  # instead of a full mesh, which is a separate, much larger feature.
+  MESH_PARTICIPANT_LIMIT = 8
 
   belongs_to :chat_item, class_name: "PlConnectChatItem", foreign_key: "chat_item_id", optional: true, inverse_of: false
   belongs_to :initiator, class_name: "User", foreign_key: "initiator_user_id", optional: true, inverse_of: false

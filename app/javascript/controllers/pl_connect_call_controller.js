@@ -497,6 +497,12 @@ export default class extends Controller {
         if (this.voicemailFallbackTimer) clearTimeout(this.voicemailFallbackTimer)
         this.voicemailFallbackTimer = null
         this.awaitingVoicemail = false
+        // Silence the caller's own ringback right away, regardless of whether
+        // the chat-stream "call.missed" event (which normally does this - see
+        // handleCallEvent) has arrived yet - otherwise it keeps cycling
+        // underneath the greeting/beep below and the two mix into a garbled,
+        // crackling tone.
+        this.ringbackPlayer.stop()
 
         const audioTracks = this.localStream?.getAudioTracks() || []
         if (audioTracks.length === 0 || typeof MediaRecorder === "undefined") {
@@ -563,6 +569,12 @@ export default class extends Controller {
         this.voicemailPending = false
         this.voicemailGreetingAudio?.pause()
         this.voicemailGreetingAudio = null
+    }
+
+    // Playing the greeting/beep, or actively recording - see handleCallEvent,
+    // which must not tear the session down while either is happening.
+    _inVoicemailFlow() {
+        return this.voicemailPending || (this.mediaRecorder && this.mediaRecorder.state !== "inactive")
     }
 
     stopVoicemailRecording() {
@@ -878,6 +890,17 @@ export default class extends Controller {
                 break
             case "call.missed":
             case "call.ended":
+                if (this._inVoicemailFlow()) {
+                    // "voicemail_start" (call stream) already won the race against
+                    // this delayed "call.missed"/"call.ended" (chat stream, no
+                    // ordering guarantee between the two - see
+                    // CallVoicemailTimeoutJob) and the greeting/beep/recording is
+                    // already under way. Tearing down here would cut it off
+                    // mid-flight; the voicemail flow owns its own teardown
+                    // (finishVoicemail) once it actually finishes.
+                    break
+                }
+
                 if (payload.event === "call.missed" && this.awaitingVoicemail) {
                     // PlConnect::CallVoicemailTimeoutJob also broadcasts
                     // "voicemail_start" on the call's own signalling stream - a
