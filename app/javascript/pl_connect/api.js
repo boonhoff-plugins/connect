@@ -38,6 +38,7 @@ export const ENDPOINTS = {
   hangupCall: "/pl_connect_api/hangup_call",
   callMediaState: "/pl_connect_api/call_media_state",
   uploadVoicemail: "/pl_connect_api/upload_voicemail",
+  voicemailGreeting: "/pl_connect_api/voicemail_greeting",
   callInvitableUsers: "/pl_connect_api/call_invitable_users",
   inviteCall: "/pl_connect_api/invite_call"
 }

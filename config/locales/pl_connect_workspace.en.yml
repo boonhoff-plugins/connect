@@ -118,6 +118,7 @@ en:
       start_audio_call: "Start audio call"
       start_video_call: "Start video call"
       recording_voicemail: "Recording voicemail… hang up to send"
+      voicemail_greeting: "Playing greeting…"
       invite: "Invite someone"
       invite_search_placeholder: "Search people"
       invite_no_results: "Everyone in this conversation is already in the call."

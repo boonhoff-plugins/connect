@@ -468,6 +468,28 @@ class PlConnectApiController < ApplicationController
     _render_exception(e, "upload_voicemail")
   end
 
+  # GET /pl_connect_api/voicemail_greeting
+  #
+  # Streams the spoken announcement played before voicemail recording starts
+  # (see pl_connect_call_controller.js#playVoicemailGreeting). Not
+  # conversation-specific, so only the "someone must be logged in" check
+  # applies (see the class doc's authorization model, layer 1). Configurable
+  # via a file_lookup LookupItem (PlConnect::CallService.voicemail_greeting_audio)
+  # rather than a bundled asset, so it can be swapped without a deploy; 404
+  # when none is configured, which the client treats as "skip to the beep".
+  def voicemail_greeting
+    return head :unauthorized if current_chat_user.blank?
+
+    content = PlConnect::CallService.voicemail_greeting_audio
+    return head :not_found if content.blank?
+
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    send_data content, type: PlConnect::CallService.voicemail_greeting_content_type, disposition: "inline"
+  rescue StandardError => e
+    Rails.logger.error "PlConnectApiController#voicemail_greeting: #{e.class}: #{e.message}"
+    head :internal_server_error
+  end
+
   # GET /pl_connect_api/download_attachment
   #
   # The only way to get an attachment's bytes. Membership is re-checked here on

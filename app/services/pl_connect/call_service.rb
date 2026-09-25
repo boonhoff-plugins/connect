@@ -164,6 +164,32 @@ module PlConnect
       configured.positive? ? configured : 120
     end
 
+    # uuid of the "voicemail_greeting_audio" file_lookup (see
+    # AddPlConnectVoicemailGreeting) - referenced by fixed uuid, like
+    # AddPlConnectCallAudioConfig's own group/item uuids, rather than by
+    # yaml_key: the audio bytes are fetched live (see #voicemail_greeting_audio
+    # below) and must never go through the PLUGIN yaml cache in the first
+    # place (same memory-safety reasoning as LookupItem#file_content).
+    GREETING_ITEM_UUID = "86ad3ff6-8cc5-4e7d-aded-64e5d7ea6660--lookup_item--20260925120000"
+
+    # The configured greeting LookupItem, or nil when it was deleted.
+    def self.voicemail_greeting_item
+      LookupItem.find_by(uuid: GREETING_ITEM_UUID, del_flag: false, active: true)
+    end
+
+    # Live fetch of the greeting's audio bytes - played by
+    # pl_connect_call_controller.js#playVoicemailGreeting before a voicemail
+    # recording starts. An administrator can replace the announcement at any
+    # time by uploading a new file onto this LookupItem; nil (no announcement
+    # played, straight to the beep) when none is configured.
+    def self.voicemail_greeting_audio
+      voicemail_greeting_item&.file_content
+    end
+
+    def self.voicemail_greeting_content_type
+      voicemail_greeting_item&.file_data_content_type.presence || "audio/mpeg"
+    end
+
     # Starts a new call, or joins/returns the one already running in this
     # conversation — a second click on the call button must never create a
     # second, competing PlConnectCallItem, and a group member clicking it

@@ -114,6 +114,7 @@ de:
       start_audio_call: "Audioanruf starten"
       start_video_call: "Videoanruf starten"
       recording_voicemail: "Sprachnachricht wird aufgenommen… zum Senden auflegen"
+      voicemail_greeting: "Ansage wird abgespielt…"
       invite: "Jemanden einladen"
       invite_search_placeholder: "Personen suchen"
       invite_no_results: "Alle Mitglieder dieser Unterhaltung sind bereits im Anruf."

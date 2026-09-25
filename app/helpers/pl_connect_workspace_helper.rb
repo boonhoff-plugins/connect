@@ -138,6 +138,7 @@ module PlConnectWorkspaceHelper
       start_audio_call: I18n.t("pl_connect.call.start_audio_call"),
       start_video_call: I18n.t("pl_connect.call.start_video_call"),
       recording_voicemail: I18n.t("pl_connect.call.recording_voicemail"),
+      voicemail_greeting: I18n.t("pl_connect.call.voicemail_greeting"),
       invite: I18n.t("pl_connect.call.invite"),
       invite_search_placeholder: I18n.t("pl_connect.call.invite_search_placeholder"),
       invite_no_results: I18n.t("pl_connect.call.invite_no_results"),

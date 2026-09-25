@@ -50,7 +50,7 @@ import { Controller } from "@hotwired/stimulus"
 import plConnectConsumer from "../pl_connect/cable"
 import { ENDPOINTS, apiGet, apiPost, apiUpload } from "../pl_connect/api"
 import { clear, el, toggle, presenceDotClass } from "../pl_connect/dom"
-import { createRingbackPlayer, createRingtonePlayer } from "../pl_connect/tone_player"
+import { createRingbackPlayer, createRingtonePlayer, playBeep } from "../pl_connect/tone_player"
 
 export default class extends Controller {
     static targets = [
@@ -120,6 +120,11 @@ export default class extends Controller {
         this.mediaRecorder = null
         this.voicemailChunks = []
         this.voicemailStopTimer = null
+        // True from the "voicemail_start" signal until the greeting/beep
+        // finished and actual recording began - see startVoicemailRecording/
+        // cancelVoicemailPlayback/hangup.
+        this.voicemailPending = false
+        this.voicemailGreetingAudio = null
 
         this.onInvite = (event) => this.handleInvite(event)
         this.onInviteResolved = (event) => this.handleInviteResolved(event)
@@ -480,11 +485,15 @@ export default class extends Controller {
 
     // Triggered by the "voicemail_start" call-stream event, broadcast by
     // PlConnect::CallVoicemailTimeoutJob once it has ended this unanswered
-    // call as missed. Records the caller's own microphone track only (no
-    // video - there is no remote party to see it) via MediaRecorder;
-    // uploading and tearing down happens in finishVoicemail once recording
-    // stops, either automatically (max_duration_seconds) or via #hangup.
-    startVoicemailRecording(payload) {
+    // call as missed. Plays the configurable spoken greeting followed by a
+    // beep (see playVoicemailGreeting) and only starts recording once that
+    // finished - hanging up during the greeting/beep (see hangup) cancels it
+    // and never starts a recording at all. Recording itself is of the
+    // caller's own microphone track only (no video - there is no remote party
+    // to see it) via MediaRecorder; uploading and tearing down happens in
+    // finishVoicemail once recording stops, either automatically
+    // (max_duration_seconds) or via #hangup.
+    async startVoicemailRecording(payload) {
         if (this.voicemailFallbackTimer) clearTimeout(this.voicemailFallbackTimer)
         this.voicemailFallbackTimer = null
         this.awaitingVoicemail = false
@@ -494,6 +503,13 @@ export default class extends Controller {
             this.teardownCall()
             return
         }
+
+        this.voicemailPending = true
+        if (this.hasStatusLabelTarget) this.statusLabelTarget.textContent = this.i18nValue.voicemail_greeting
+
+        await this.playVoicemailGreeting()
+        if (!this.voicemailPending) return // cancelled - see cancelVoicemailPlayback/hangup
+        this.voicemailPending = false
 
         this.voicemailChunks = []
 
@@ -514,6 +530,39 @@ export default class extends Controller {
 
         const maxMs = (Number(payload?.max_duration_seconds) || 120) * 1000
         this.voicemailStopTimer = setTimeout(() => this.stopVoicemailRecording(), maxMs)
+    }
+
+    // Plays the spoken announcement configured as a file_lookup LookupItem
+    // (child of lookup_item 3699/pl_connect_connect, see
+    // PlConnect::CallService.voicemail_greeting_audio and
+    // PlConnectApiController#voicemail_greeting - swap the uploaded file there
+    // to change the announcement without a deploy), then a short beep
+    // (synthesised, same mechanism as the ringtone/ringback tones - see
+    // tone_player.js). A missing/unconfigured/unplayable greeting fails
+    // silently straight to the beep, so recording is never blocked by it.
+    async playVoicemailGreeting() {
+        this.voicemailGreetingAudio = new Audio(ENDPOINTS.voicemailGreeting)
+        try {
+            await new Promise((resolve) => {
+                this.voicemailGreetingAudio.addEventListener("ended", resolve, { once: true })
+                this.voicemailGreetingAudio.addEventListener("error", resolve, { once: true })
+                this.voicemailGreetingAudio.play().catch(resolve)
+            })
+        } finally {
+            this.voicemailGreetingAudio = null
+        }
+
+        if (!this.voicemailPending) return // cancelled while the greeting was playing
+        await playBeep()
+    }
+
+    // Interrupts an in-progress greeting/beep - called from hangup() when the
+    // caller hangs up before recording actually started, so no message (not
+    // even a silent one) is ever produced for a call the caller cut short.
+    cancelVoicemailPlayback() {
+        this.voicemailPending = false
+        this.voicemailGreetingAudio?.pause()
+        this.voicemailGreetingAudio = null
     }
 
     stopVoicemailRecording() {
@@ -622,13 +671,25 @@ export default class extends Controller {
         }))
     }
 
-    // Ends the call normally, or - while a voicemail is being recorded (see
-    // startVoicemailRecording) - stops and sends the recording instead. Same
-    // button, same action, so the person leaving a message never has to find
-    // a second control: hanging up IS how a voicemail is finished early.
+    // Ends the call normally, or - while a voicemail greeting/beep is playing
+    // or a recording is in progress (see startVoicemailRecording) - cancels/
+    // stops that instead. Same button, same action, so the person leaving a
+    // message never has to find a second control: hanging up IS how a
+    // voicemail is finished early (or, during the greeting/beep, abandoned
+    // with no recording at all).
     async hangup() {
         if (this.mediaRecorder && this.mediaRecorder.state !== "inactive") {
             this.stopVoicemailRecording()
+            return
+        }
+
+        if (this.voicemailPending) {
+            // The call already ended server-side as "missed" before
+            // "voicemail_start" was even broadcast (see
+            // CallVoicemailTimeoutJob) - nothing left to hang up server side,
+            // just stop playing and tear the panel down.
+            this.cancelVoicemailPlayback()
+            this.teardownCall()
             return
         }
 
@@ -862,6 +923,8 @@ export default class extends Controller {
 
         this.callSubscription?.unsubscribe()
         this.callSubscription = null
+
+        this.cancelVoicemailPlayback()
 
         this.peers.forEach((peer) => peer.pc.close())
         this.peers.clear()

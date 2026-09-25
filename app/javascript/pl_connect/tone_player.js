@@ -66,3 +66,30 @@ export function createRingbackPlayer() {
 export function createRingtonePlayer() {
     return new TonePlayer({ frequencies: [440, 480], onMs: 1000, offMs: 1000 })
 }
+
+// One-shot "record now" beep played after the voicemail greeting (see
+// pl_connect_call_controller.js#playVoicemailGreeting) - the classic single
+// tone, not the on/off cadence of the ringtone/ringback above. Resolves once
+// the tone has finished playing so the caller only starts awaiting after it.
+export function playBeep({ frequency = 1000, durationMs = 400, gain = 0.2 } = {}) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext
+    if (!AudioContextClass) return Promise.resolve() // no Web Audio support: skip straight to recording
+
+    const context = new AudioContextClass()
+
+    return new Promise((resolve) => {
+        const gainNode = context.createGain()
+        gainNode.gain.value = gain
+        gainNode.connect(context.destination)
+
+        const oscillator = context.createOscillator()
+        oscillator.frequency.value = frequency
+        oscillator.connect(gainNode)
+        oscillator.onended = () => {
+            context.close().catch(() => { })
+            resolve()
+        }
+        oscillator.start()
+        oscillator.stop(context.currentTime + durationMs / 1000)
+    })
+}
