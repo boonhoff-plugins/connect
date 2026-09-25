@@ -2,15 +2,22 @@
   Icon rail - the primary navigation of the workspace.
 
   Kept deliberately narrow (64px) so the two working columns next to it get as
-  much horizontal space as possible. Links are plain Turbo Drive visits: every
-  workspace section uses the same layout, so a full page visit swaps only the
-  content and keeps the rail visually stable.
+  much horizontal space as possible. Section links target the "pl_connect_main"
+  turbo-frame (see layouts/pl_connect.html.erb, which wraps this rail, the
+  topbar and the yielded section content in it) with data-turbo-action="advance"
+  set on that frame - so clicking them still updates the URL/history normally,
+  but only that frame's content is replaced. The div carrying
+  data-controller="pl-connect-call ..." (and, crucially, the active-call
+  overlay) lives OUTSIDE the frame and is therefore never torn down, keeping
+  a running call alive while switching sections. "Back" below is the one
+  deliberate exception (data-turbo="false", see its own comment).
 %>
 <nav class="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-base-300 bg-base-300 py-2"
      aria-label="<%= I18n.t("pl_connect.workspace.title") %>">
 
   <%# Plugin mark. Links back to the workspace start page. %>
   <a href="/pl_connect_workspace/index_element"
+     data-turbo-frame="pl_connect_main"
      class="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-content"
      title="<%= I18n.t("pl_connect.workspace.title") %>">
     <i class="fa-solid fa-bolt text-lg" aria-hidden="true"></i>
@@ -19,6 +26,7 @@
   <% (@c[:pl_connect_sections] || []).each do |section| %>
     <% active = (@c[:pl_connect_section].to_s == section[:key]) %>
     <a href="<%= section[:path] %>"
+       data-turbo-frame="pl_connect_main"
        class="group relative flex w-14 flex-col items-center gap-1 rounded-lg px-1 py-2 transition-colors <%= active ? "bg-base-100 text-primary" : "text-base-content/70 hover:bg-base-200 hover:text-base-content" %>"
        aria-current="<%= active ? "page" : "false" %>"
        title="<%= I18n.t("pl_connect.workspace.section.#{section[:i18n]}") %>">

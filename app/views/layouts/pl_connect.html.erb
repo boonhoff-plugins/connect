@@ -106,21 +106,45 @@
          data-pl-connect-call-i18n-value="<%= pl_connect_call_i18n.to_json %>"
          data-pl-connect-call-ice-servers-value="<%= PlConnect::CallService.ice_servers.to_json %>"
          data-pl-connect-call-pending-value="<%= @c[:pl_connect_pending_call] %>"
+         data-pl-connect-call-resume-value="<%= pl_connect_call_resume_payload(@c[:pl_connect_user]) %>"
          data-pl-connect-call-ringtone-active-value="<%= PlConnect::CallService.ringtone_active? ? "true" : "false" %>"
          data-pl-connect-call-ringback-active-value="<%= PlConnect::CallService.ringback_active? ? "true" : "false" %>"
          data-pl-connect-user-picker-i18n-value="<%= pl_connect_user_picker_i18n.to_json %>">
-      <%= render "pl_connect_workspace/rail" %>
+      <%#
+        Rail + topbar + the yielded section are wrapped in one turbo-frame so
+        every internal navigation (Start/Chat/Calendar/Calls - see _rail.html.erb's
+        data-turbo-frame targets) only ever replaces THIS frame's content.
+        data-turbo-action="advance" promotes those frame navigations to full
+        history entries (URL/back-button keep working) while still only
+        swapping the frame - the ancestor data-controller div above, and
+        crucially call_overlay + the user-picker overlay below (both siblings
+        OUTSIDE this frame), are never touched. That is what keeps an active
+        call's live <video> elements and the pl-connect-call Stimulus
+        controller instance alive while the user browses between sections -
+        before this, every rail click was a full Turbo Drive visit that
+        replaced the whole <body>, tearing the call down. Only the rail's own
+        "Back" link (data-turbo="false", a real jump to the main application's
+        different layout) still fully disconnects - see
+        PlConnect::CallService.resumable_call_for / "resume" data value for
+        how that specific case is handled instead (rejoining rather than
+        preventing the disconnect).
+      %>
+      <turbo-frame id="pl_connect_main" data-turbo-action="advance" class="flex h-full w-full">
+        <%= render "pl_connect_workspace/rail" %>
 
-      <div class="flex min-w-0 flex-1 flex-col">
-        <%= render "pl_connect_workspace/topbar" %>
+        <div class="flex min-w-0 flex-1 flex-col">
+          <%= render "pl_connect_workspace/topbar" %>
 
-        <main class="flex min-h-0 flex-1">
-          <%= yield %>
-        </main>
-      </div>
+          <main class="flex min-h-0 flex-1">
+            <%= yield %>
+          </main>
+        </div>
+      </turbo-frame>
 
       <%# Incoming-call banner + active-call panel - shared with the main-app
-          shell widget, see pl_connect_workspace/_call_overlay.html.erb. %>
+          shell widget, see pl_connect_workspace/_call_overlay.html.erb.
+          Deliberately OUTSIDE the turbo-frame above: it must survive every
+          in-workspace navigation untouched (see the comment there). %>
       <%= render "pl_connect_workspace/call_overlay" %>
 
       <%#

@@ -69,6 +69,16 @@ export default class extends Controller {
         // creates a 1:1 chat. Only "audio", "video" or "" - never trusted
         // beyond that (see handleConversationOpened).
         pending: String,
+        // JSON { uuid, chat_uuid, video_active } for the call this user is
+        // still an active participant of, or "" (see
+        // PlConnect::CallService.resumable_call_for /
+        // PlConnectWorkspaceHelper#pl_connect_call_resume_payload). Consumed
+        // once, in connect() via _maybeResumeCall(), to silently rejoin a call
+        // that survived a full page reload (this controller's own JS/WebRTC
+        // state never does - see the layout's turbo-frame comment for why
+        // in-workspace navigation no longer needs this at all, and only the
+        // rail's "Back" link / an outright page refresh still do).
+        resume: String,
         // PlConnect::CallService.ringtone_active?/.ringback_active? (see
         // app/views/layouts/pl_connect.html.erb) - whether the synthesised
         // tones (tone_player.js) play at all. Recording a voicemail is not
@@ -116,6 +126,8 @@ export default class extends Controller {
         document.addEventListener("pl-connect:call-invite", this.onInvite)
         document.addEventListener("pl-connect:call-event", this.onCallEvent)
         document.addEventListener("pl-connect:conversation-opened", this.onConversationOpened)
+
+        this._maybeResumeCall()
     }
 
     disconnect() {
@@ -166,6 +178,31 @@ export default class extends Controller {
 
         this.chatUuid = chatUuid
         await this.beginSession(result.call, video)
+    }
+
+    // Rejoins a call this device is still a participant of server side, after
+    // a fresh controller mount (full page reload) wiped out the previous
+    // getUserMedia stream and every RTCPeerConnection. Re-subscribing to the
+    // call's ActionCable stream is enough to make the other participants'
+    // controllers redo the mesh join handshake with THIS user_uuid specifically
+    // (see PlConnectCallChannel#subscribed/#unsubscribed and the "== Mesh join
+    // algorithm" note at the top of this file) - the browser tab that was just
+    // left/reloaded already triggered #unsubscribed (closing the WebSocket),
+    // so by the time this subscribes again the other side has already torn
+    // down its stale connection to us and is ready to create a fresh one.
+    _maybeResumeCall() {
+        if (this.callUuid || !this.resumeValue) return
+
+        let resume
+        try {
+            resume = JSON.parse(this.resumeValue)
+        } catch (e) {
+            return
+        }
+        if (!resume?.uuid || !resume?.chat_uuid) return
+
+        this.chatUuid = resume.chat_uuid
+        this.beginSession({ uuid: resume.uuid, state: "active" }, resume.video_active === true)
     }
 
     // Presence stream: an invite for any conversation, whether or not it is

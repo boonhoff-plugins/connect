@@ -47,6 +47,7 @@
        data-pl-connect-call-viewer-uuid-value="<%= viewer.uuid %>"
        data-pl-connect-call-i18n-value="<%= pl_connect_call_i18n.to_json %>"
        data-pl-connect-call-ice-servers-value="<%= PlConnect::CallService.ice_servers.to_json %>"
+       data-pl-connect-call-resume-value="<%= pl_connect_call_resume_payload(viewer) %>"
        data-pl-connect-shell-i18n-value="<%= pl_connect_shell_i18n.to_json %>">
     <%= render "pl_connect_workspace/call_overlay" %>
 

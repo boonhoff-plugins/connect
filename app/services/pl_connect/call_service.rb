@@ -53,6 +53,26 @@ module PlConnect
       ActiveModel::Type::Boolean.new.cast(value) ? true : false
     end
 
+    # The call this user is still an active (non-left) participant of, if any.
+    # Used so a fresh mount of the call Stimulus controller - a full page load,
+    # e.g. reloading the workspace or leaving it via the rail's "Back" link
+    # into the main application, both of which destroy the previous WebRTC/JS
+    # state entirely - can silently rejoin instead of just dropping the call
+    # (see PlConnectWorkspaceHelper#pl_connect_call_resume_payload).
+    #
+    # Only "active" calls qualify: a still-"ringing" call this user has not
+    # yet answered is already covered by the ordinary incoming-call banner
+    # (PlConnectPresenceChannel "call.invite"), not by this path.
+    def self.resumable_call_for(user)
+      return nil if user.blank?
+
+      PlConnectCallItem
+        .where(state: "active", del_flag: false)
+        .joins(:pl_connect_call_item_join_users)
+        .where(pl_connect_call_item_join_users: { user_id: user.id, del_flag: false, left_at: nil })
+        .first
+    end
+
     # STUN/TURN configuration handed to the browser's RTCPeerConnection.
     #
     # Follows the same "safe default, LookupItem creation deferred" precedent

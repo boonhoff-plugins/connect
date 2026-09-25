@@ -140,6 +140,24 @@ module PlConnectWorkspaceHelper
     }
   end
 
+  # JSON payload for the call Stimulus controller's "resume" value: the call
+  # this user is still an active (non-left) participant of, if any (see
+  # PlConnect::CallService.resumable_call_for), so a fresh controller mount
+  # can silently rejoin instead of just dropping the call. Empty string (not
+  # "null") when there is nothing to resume, matching the blank-safe
+  # convention already used by pl_connect_pending_call.
+  def pl_connect_call_resume_payload(user)
+    call = PlConnect::CallService.resumable_call_for(user)
+    return "" if call.blank? || call.chat_item.blank?
+
+    participant = call.participant_for(user)
+    {
+      uuid: call.uuid,
+      chat_uuid: call.chat_item.uuid,
+      video_active: participant.present? && participant.video_active == true
+    }.to_json
+  end
+
   # Translated strings for the shared "pick a colleague" modal (conversation
   # sidebar's "+" button and the Calls surface's start-call buttons).
   def pl_connect_user_picker_i18n
