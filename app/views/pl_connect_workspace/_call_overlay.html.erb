@@ -42,9 +42,9 @@
     plain Tailwind utility classes swapped by the controller - no custom
     CSS. %>
 <div data-pl-connect-call-target="activePanel"
-     data-pl-connect-call-docked-class="fixed inset-x-4 bottom-4 z-40 flex flex-col gap-2 rounded-box bg-base-100 p-3 shadow-xl ring-1 ring-base-300 sm:inset-x-auto sm:right-4 sm:w-[28rem]"
+     data-pl-connect-call-docked-class="fixed inset-x-4 bottom-4 z-40 flex h-96 flex-col gap-2 rounded-box bg-base-100 p-3 shadow-xl ring-1 ring-base-300 sm:inset-x-auto sm:right-4 sm:w-[28rem]"
      data-pl-connect-call-expanded-class="fixed inset-4 z-40 flex flex-col gap-2 rounded-box bg-base-100 p-4 shadow-xl ring-1 ring-base-300 sm:inset-8"
-     class="hidden fixed inset-x-4 bottom-4 z-40 flex flex-col gap-2 rounded-box bg-base-100 p-3 shadow-xl ring-1 ring-base-300 sm:inset-x-auto sm:right-4 sm:w-[28rem]">
+     class="hidden fixed inset-x-4 bottom-4 z-40 flex h-96 flex-col gap-2 rounded-box bg-base-100 p-3 shadow-xl ring-1 ring-base-300 sm:inset-x-auto sm:right-4 sm:w-[28rem]">
   <div class="flex items-center justify-between gap-2">
     <p class="min-w-0 flex-1 truncate text-sm font-semibold" data-pl-connect-call-target="statusLabel"></p>
     <button type="button" class="btn btn-circle btn-ghost btn-xs" data-action="pl-connect-call#toggleExpand" data-pl-connect-call-target="expandButton">
@@ -65,14 +65,30 @@
            class="absolute bottom-2 right-2 h-16 w-24 rounded border border-base-100 bg-black object-cover" autoplay playsinline muted></video>
   </div>
   <div class="flex justify-center gap-2">
-    <button type="button" class="btn btn-circle btn-sm" data-action="pl-connect-call#toggleAudio" data-pl-connect-call-target="audioButton">
+    <%# Active/inactive icon class swapped in renderMediaButtons()/setButtonState()
+        (pl_connect_call_controller.js) via the data-*-active-icon/-inactive-icon
+        attributes, same "Tailwind/FA classes live in the view" convention as the
+        docked/expanded size classes above - fa-microphone-slash and fa-video-slash
+        exist as real icons, so a plain class swap is enough here. %>
+    <button type="button" class="btn btn-circle btn-sm" data-action="pl-connect-call#toggleAudio" data-pl-connect-call-target="audioButton"
+            data-pl-connect-call-active-icon="fa-microphone" data-pl-connect-call-inactive-icon="fa-microphone-slash">
       <i class="fa-solid fa-microphone" aria-hidden="true"></i>
     </button>
-    <button type="button" class="btn btn-circle btn-sm" data-action="pl-connect-call#toggleVideo" data-pl-connect-call-target="videoButton">
+    <button type="button" class="btn btn-circle btn-sm" data-action="pl-connect-call#toggleVideo" data-pl-connect-call-target="videoButton"
+            data-pl-connect-call-active-icon="fa-video" data-pl-connect-call-inactive-icon="fa-video-slash">
       <i class="fa-solid fa-video" aria-hidden="true"></i>
     </button>
+    <%# fa-display has no official "slashed" counterpart in Font Awesome, so the
+        "not sharing" state is a plain CSS diagonal line overlaid on the icon
+        (toggled via the hidden class, see renderMediaButtons()) instead of a
+        second icon glyph. %>
     <button type="button" class="btn btn-circle btn-sm" data-action="pl-connect-call#toggleScreen" data-pl-connect-call-target="screenButton">
-      <i class="fa-solid fa-display" aria-hidden="true"></i>
+      <span class="relative inline-flex h-4 w-4 items-center justify-center">
+        <i class="fa-solid fa-display" aria-hidden="true"></i>
+        <span data-pl-connect-call-target="screenSlashIcon" class="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden="true">
+          <span class="h-px w-[140%] rotate-45 bg-current"></span>
+        </span>
+      </span>
     </button>
     <button type="button" class="btn btn-circle btn-sm btn-error" data-action="pl-connect-call#hangup">
       <i class="fa-solid fa-phone-slash" aria-hidden="true"></i>

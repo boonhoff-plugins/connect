@@ -56,7 +56,7 @@ export default class extends Controller {
     static targets = [
         "incomingBanner", "incomingLabel",
         "activePanel", "statusLabel", "remoteVideos", "localVideo",
-        "audioButton", "videoButton", "screenButton", "expandButton"
+        "audioButton", "videoButton", "screenButton", "screenSlashIcon", "expandButton"
     ]
 
     static values = {
@@ -581,13 +581,30 @@ export default class extends Controller {
             this.i18nValue.camera_off, this.i18nValue.camera_on)
         this.setButtonState(this.screenButtonTarget, this.hasScreenButtonTarget, this.screenActive,
             this.i18nValue.stop_share, this.i18nValue.share_screen)
+
+        // No native fa-display-slash icon exists - the "not sharing" state is a
+        // plain diagonal line overlay (see the view) shown only while inactive.
+        if (this.hasScreenSlashIconTarget) toggle(this.screenSlashIconTarget, !this.screenActive)
     }
 
+    // Reflects CURRENT state on the icon (crossed-out when the feature is off),
+    // while the title/tooltip describes the action a click would perform - the
+    // active/inactive icon classes are read from data attributes on the button
+    // itself (see the view) rather than hardcoded here, same convention as the
+    // docked/expanded size classes used by _applySizeClasses().
     setButtonState(target, hasTarget, active, activeTitle, inactiveTitle) {
         if (!hasTarget) return
 
         target.classList.toggle("btn-active", active)
         target.title = active ? activeTitle : inactiveTitle
+
+        const icon = target.querySelector("i")
+        const activeIconClass = target.dataset.plConnectCallActiveIcon
+        const inactiveIconClass = target.dataset.plConnectCallInactiveIcon
+        if (icon && activeIconClass && inactiveIconClass) {
+            icon.classList.toggle(activeIconClass, active)
+            icon.classList.toggle(inactiveIconClass, !active)
+        }
     }
 
     // --- panel size ---------------------------------------------------------
