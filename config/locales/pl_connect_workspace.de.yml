@@ -26,7 +26,9 @@ de:
       online: "Online"
       away: "Abwesend"
       busy: "Beschäftigt"
+      dnd: "Bitte nicht stören"
       offline: "Offline"
+      set_status: "Status festlegen"
     calendar:
       join_meeting: "Am Meeting teilnehmen"
     chat:
@@ -76,9 +78,9 @@ de:
         "member.removed": "%{login} wurde aus der Unterhaltung entfernt."
         "conversation.created": "Die Unterhaltung wurde erstellt."
         "call.started": "%{login} hat einen Anruf gestartet."
-        "call.ended": "Der Anruf wurde beendet."
+        "call.ended": "%{login} hat den Anruf beendet."
         "call.missed": "Verpasster Anruf."
-        "call.declined": "Anruf abgelehnt."
+        "call.declined": "%{login} hat den Anruf abgelehnt."
       voicemail_caption: "🎤 Sprachnachricht"
     user_picker:
       title: "Person auswählen"
@@ -112,5 +114,10 @@ de:
       start_audio_call: "Audioanruf starten"
       start_video_call: "Videoanruf starten"
       recording_voicemail: "Sprachnachricht wird aufgenommen… zum Senden auflegen"
+      invite: "Jemanden einladen"
+      invite_search_placeholder: "Personen suchen"
+      invite_no_results: "Alle Mitglieder dieser Unterhaltung sind bereits im Anruf."
+      invite_search_no_results: "Keine passenden Personen gefunden."
+      invite_error: "Die Einladungsliste konnte nicht geladen werden."
     shell:
       new_message: "Neue Nachricht"

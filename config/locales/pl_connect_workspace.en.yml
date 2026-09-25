@@ -26,7 +26,9 @@ en:
       online: "Online"
       away: "Away"
       busy: "Busy"
+      dnd: "Do not disturb"
       offline: "Offline"
+      set_status: "Set your status"
     calendar:
       join_meeting: "Join meeting"
     chat:
@@ -76,9 +78,9 @@ en:
         "member.removed": "%{login} was removed from the conversation."
         "conversation.created": "The conversation was created."
         "call.started": "%{login} started a call."
-        "call.ended": "The call has ended."
+        "call.ended": "%{login} ended the call."
         "call.missed": "Missed call."
-        "call.declined": "Call declined."
+        "call.declined": "%{login} declined the call."
       # Fixed caption for a voicemail message (see
       # PlConnectApiController#upload_voicemail) - the recording is an
       # ordinary message with an audio attachment, not a system message, so
@@ -116,5 +118,10 @@ en:
       start_audio_call: "Start audio call"
       start_video_call: "Start video call"
       recording_voicemail: "Recording voicemail… hang up to send"
+      invite: "Invite someone"
+      invite_search_placeholder: "Search people"
+      invite_no_results: "Everyone in this conversation is already in the call."
+      invite_search_no_results: "No matching people found."
+      invite_error: "The invite list could not be loaded."
     shell:
       new_message: "New message"

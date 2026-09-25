@@ -37,7 +37,9 @@ export const ENDPOINTS = {
   answerCall: "/pl_connect_api/answer_call",
   hangupCall: "/pl_connect_api/hangup_call",
   callMediaState: "/pl_connect_api/call_media_state",
-  uploadVoicemail: "/pl_connect_api/upload_voicemail"
+  uploadVoicemail: "/pl_connect_api/upload_voicemail",
+  callInvitableUsers: "/pl_connect_api/call_invitable_users",
+  inviteCall: "/pl_connect_api/invite_call"
 }
 
 export function csrfToken() {

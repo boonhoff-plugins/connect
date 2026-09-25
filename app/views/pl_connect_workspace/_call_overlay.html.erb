@@ -45,11 +45,34 @@
      data-pl-connect-call-docked-class="fixed inset-x-4 bottom-4 z-40 flex h-96 flex-col gap-2 rounded-box bg-base-100 p-3 shadow-xl ring-1 ring-base-300 sm:inset-x-auto sm:right-4 sm:w-[28rem]"
      data-pl-connect-call-expanded-class="fixed inset-4 z-40 flex flex-col gap-2 rounded-box bg-base-100 p-4 shadow-xl ring-1 ring-base-300 sm:inset-8"
      class="hidden fixed inset-x-4 bottom-4 z-40 flex h-96 flex-col gap-2 rounded-box bg-base-100 p-3 shadow-xl ring-1 ring-base-300 sm:inset-x-auto sm:right-4 sm:w-[28rem]">
-  <div class="flex items-center justify-between gap-2">
+  <div class="relative flex items-center justify-between gap-2">
     <p class="min-w-0 flex-1 truncate text-sm font-semibold" data-pl-connect-call-target="statusLabel"></p>
+    <button type="button" class="btn btn-circle btn-ghost btn-xs" data-action="pl-connect-call#toggleInvite" data-pl-connect-call-target="inviteButton" title="<%= t('pl_connect.call.invite') %>">
+      <i class="fa-solid fa-user-plus" aria-hidden="true"></i>
+    </button>
     <button type="button" class="btn btn-circle btn-ghost btn-xs" data-action="pl-connect-call#toggleExpand" data-pl-connect-call-target="expandButton">
       <i class="fa-solid fa-expand" aria-hidden="true"></i>
     </button>
+
+    <%# Conversation members not already in the call - the only way anyone is
+        ever rung into a group/channel/team call (see
+        PlConnect::CallService's class doc: starting/joining one yourself
+        never rings anyone else). Populated on open by
+        pl-connect-call#loadInvitableUsers, one button per candidate,
+        clicking one calls pl-connect-call#inviteUser (see the controller).
+        Typing into the search box widens the list to a tenant-wide directory
+        search (PlConnect::CallService#invitable_members with a term), so a
+        colleague who was never part of this conversation can be rung in too. %>
+    <div data-pl-connect-call-target="invitePanel"
+         class="hidden absolute right-0 top-8 z-10 w-56 max-h-64 overflow-y-auto rounded-box bg-base-100 p-1 shadow-xl ring-1 ring-base-300">
+      <input type="search"
+             class="input input-xs input-bordered mb-1 w-full"
+             autocomplete="off"
+             placeholder="<%= t('pl_connect.call.invite_search_placeholder') %>"
+             data-pl-connect-call-target="inviteSearch"
+             data-action="input->pl-connect-call#onInviteSearchInput">
+      <div data-pl-connect-call-target="inviteList" class="flex flex-col"></div>
+    </div>
   </div>
   <div class="relative flex-1 overflow-hidden rounded-box bg-black">
     <%# One <video> per remote participant is appended here at runtime by

@@ -48,15 +48,16 @@
 // by PlConnect::CallService, not by this controller.
 import { Controller } from "@hotwired/stimulus"
 import plConnectConsumer from "../pl_connect/cable"
-import { ENDPOINTS, apiPost, apiUpload } from "../pl_connect/api"
-import { toggle } from "../pl_connect/dom"
+import { ENDPOINTS, apiGet, apiPost, apiUpload } from "../pl_connect/api"
+import { clear, el, toggle, presenceDotClass } from "../pl_connect/dom"
 import { createRingbackPlayer, createRingtonePlayer } from "../pl_connect/tone_player"
 
 export default class extends Controller {
     static targets = [
         "incomingBanner", "incomingLabel",
         "activePanel", "statusLabel", "remoteVideos", "localVideo",
-        "audioButton", "videoButton", "screenButton", "screenSlashIcon", "expandButton"
+        "audioButton", "videoButton", "screenButton", "screenSlashIcon", "expandButton",
+        "inviteButton", "invitePanel", "inviteSearch", "inviteList"
     ]
 
     static values = {
@@ -121,9 +122,11 @@ export default class extends Controller {
         this.voicemailStopTimer = null
 
         this.onInvite = (event) => this.handleInvite(event)
+        this.onInviteResolved = (event) => this.handleInviteResolved(event)
         this.onCallEvent = (event) => this.handleCallEvent(event)
         this.onConversationOpened = () => this.handleConversationOpened()
         document.addEventListener("pl-connect:call-invite", this.onInvite)
+        document.addEventListener("pl-connect:call-invite-resolved", this.onInviteResolved)
         document.addEventListener("pl-connect:call-event", this.onCallEvent)
         document.addEventListener("pl-connect:conversation-opened", this.onConversationOpened)
 
@@ -132,8 +135,10 @@ export default class extends Controller {
 
     disconnect() {
         document.removeEventListener("pl-connect:call-invite", this.onInvite)
+        document.removeEventListener("pl-connect:call-invite-resolved", this.onInviteResolved)
         document.removeEventListener("pl-connect:call-event", this.onCallEvent)
         document.removeEventListener("pl-connect:conversation-opened", this.onConversationOpened)
+        clearTimeout(this.inviteSearchTimer)
         this.ringtonePlayer.stop()
         this.teardownCall()
     }
@@ -173,8 +178,15 @@ export default class extends Controller {
         const chatUuid = this.chatController?.chatUuid
         if (!chatUuid) return
 
+        // Instant feedback: the panel opens right away, well before the
+        // server round trip and getUserMedia below finish (see beginSession).
+        this._showConnectingPanel()
+
         const result = await apiPost(ENDPOINTS.startCall, { chat_uuid: chatUuid })
-        if (!result.successful) return this.toast(result.successful_text)
+        if (!result.successful) {
+            this.teardownCall()
+            return this.toast(result.successful_text)
+        }
 
         this.chatUuid = chatUuid
         await this.beginSession(result.call, video)
@@ -220,15 +232,33 @@ export default class extends Controller {
         if (this.ringtoneActiveValue) this.ringtonePlayer.start()
     }
 
+    // Presence stream: the SAME call invite was already answered/declined in
+    // another tab/window of this session (see
+    // PlConnect::CallService#_resolve_invite) - stop ringing/showing the
+    // banner here too, since acting on it now would be redundant at best (the
+    // other tab already told the server what to do) and confusing at worst.
+    handleInviteResolved(event) {
+        const payload = event.detail
+        if (!payload || !payload.call_uuid) return
+        if (this.incomingInvite?.call_uuid === payload.call_uuid) this.dismissIncoming()
+    }
+
     async acceptIncoming() {
         const invite = this.incomingInvite
         this.dismissIncoming()
         if (!invite) return
 
+        // Instant feedback: the panel opens right away, well before the
+        // server round trip and getUserMedia below finish (see beginSession).
+        this._showConnectingPanel()
+
         const result = await apiPost(ENDPOINTS.answerCall, {
             chat_uuid: invite.chat_uuid, call_uuid: invite.call_uuid, accept: true
         })
-        if (!result.successful) return this.toast(result.successful_text)
+        if (!result.successful) {
+            this.teardownCall()
+            return this.toast(result.successful_text)
+        }
 
         this.chatUuid = invite.chat_uuid
         await this.beginSession(result.call, true)
@@ -256,12 +286,18 @@ export default class extends Controller {
             this.iceServersValue = call.ice_servers
         }
 
+        // Shows the panel immediately (idempotent - acceptIncoming/
+        // beginOutgoingCall already called this before the server round trip;
+        // _maybeResumeCall on a fresh page load has not, so this is the only
+        // place it happens for that path).
+        this._showConnectingPanel()
+
         try {
             this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true })
         } catch (e) {
             this.toast(this.i18nValue.media_error)
             await apiPost(ENDPOINTS.hangupCall, { chat_uuid: this.chatUuid, call_uuid: this.callUuid })
-            this.resetState()
+            this.teardownCall()
             return
         }
 
@@ -273,16 +309,6 @@ export default class extends Controller {
         if (this.hasLocalVideoTarget) this.localVideoTarget.srcObject = this.localStream
         this.renderMediaButtons()
 
-        // Every call starts docked (small), regardless of how the previous one
-        // was left - toggleExpand() only affects the call currently running.
-        this.expanded = false
-        this._applySizeClasses(this.activePanelTarget)
-        if (this.hasLocalVideoTarget) this._applySizeClasses(this.localVideoTarget)
-        if (this.hasExpandButtonTarget) this.expandButtonTarget.title = this.i18nValue.expand
-
-        if (this.hasStatusLabelTarget) this.statusLabelTarget.textContent = this.i18nValue.connecting
-        toggle(this.activePanelTarget, true)
-
         // call.state is only "ringing" here for the initiator of a direct call
         // that has not been answered yet - answer_call already transitions the
         // call to "active" before returning (see CallService#accept), so the
@@ -291,6 +317,22 @@ export default class extends Controller {
         if (this.awaitingVoicemail && this.ringbackActiveValue) this.ringbackPlayer.start()
 
         this.subscribeCallChannel(call.uuid)
+    }
+
+    // Opens the call panel, docked (small), with a "connecting" status label -
+    // called as soon as a call is being accepted/started, before the server
+    // round trip and getUserMedia/signalling actually finish, so the user gets
+    // instant feedback instead of a silent multi-second wait (see beginSession
+    // and the class doc's "instant feedback" note above their call sites).
+    _showConnectingPanel() {
+        // Every call starts docked, regardless of how the previous one was left
+        // - toggleExpand() only affects the call currently running.
+        this.expanded = false
+        this._applySizeClasses(this.activePanelTarget)
+        if (this.hasLocalVideoTarget) this._applySizeClasses(this.localVideoTarget)
+        if (this.hasExpandButtonTarget) this.expandButtonTarget.title = this.i18nValue.expand
+        if (this.hasStatusLabelTarget) this.statusLabelTarget.textContent = this.i18nValue.connecting
+        toggle(this.activePanelTarget, true)
     }
 
     subscribeCallChannel(callUuid) {
@@ -599,6 +641,78 @@ export default class extends Controller {
         await apiPost(ENDPOINTS.hangupCall, { chat_uuid: chatUuid, call_uuid: callUuid })
     }
 
+    // --- inviting someone into a running call -------------------------------
+    //
+    // The only path that ever rings anyone for a group/channel/team call (see
+    // PlConnect::CallService's class doc) - starting or joining a conference
+    // never does. Loads the candidate list fresh every time the panel opens
+    // rather than caching it, so a colleague who joined via the normal call
+    // button a moment ago immediately drops off the list. With no search term
+    // this is just this conversation's own members; typing a term widens it to
+    // a tenant-wide directory search (see PlConnect::CallService#invitable_members)
+    // so someone who was never part of this conversation can be rung in too.
+    async toggleInvite() {
+        if (!this.hasInvitePanelTarget) return
+
+        const opening = this.invitePanelTarget.classList.contains("hidden")
+        toggle(this.invitePanelTarget, opening)
+        if (opening) {
+            if (this.hasInviteSearchTarget) this.inviteSearchTarget.value = ""
+            await this.loadInvitableUsers()
+        }
+    }
+
+    // Debounced so a fast typist does not fire a request per keystroke.
+    onInviteSearchInput() {
+        clearTimeout(this.inviteSearchTimer)
+        this.inviteSearchTimer = setTimeout(() => this.loadInvitableUsers(), 300)
+    }
+
+    async loadInvitableUsers() {
+        if (!this.hasInviteListTarget || !this.callUuid) return
+
+        clear(this.inviteListTarget)
+        const term = this.hasInviteSearchTarget ? this.inviteSearchTarget.value.trim() : ""
+        const result = await apiGet(ENDPOINTS.callInvitableUsers, { chat_uuid: this.chatUuid, call_uuid: this.callUuid, term })
+
+        if (!result.successful) {
+            this.inviteListTarget.appendChild(el("p", { class: "px-2 py-3 text-center text-xs text-base-content/60", text: this.i18nValue.invite_error }))
+            return
+        }
+
+        const users = result.users || []
+        if (users.length === 0) {
+            const text = term ? this.i18nValue.invite_search_no_results : this.i18nValue.invite_no_results
+            this.inviteListTarget.appendChild(el("p", { class: "px-2 py-3 text-center text-xs text-base-content/60", text }))
+            return
+        }
+
+        const presence = result.presence || {}
+        users.forEach((user) => {
+            this.inviteListTarget.appendChild(el("button", {
+                class: "flex w-full items-center gap-2 rounded-box px-2 py-1.5 text-left text-sm hover:bg-base-200",
+                attrs: { type: "button" },
+                dataset: { action: "pl-connect-call#inviteUser", plConnectUserUuid: user.uuid },
+                children: [
+                    el("span", { class: `inline-block h-2 w-2 shrink-0 rounded-full ${presenceDotClass(presence[user.uuid])}` }),
+                    el("span", { class: "min-w-0 flex-1 truncate", text: user.title || user.login })
+                ]
+            }))
+        })
+    }
+
+    async inviteUser(event) {
+        const uuid = event.currentTarget?.dataset?.plConnectUserUuid
+        if (!uuid || !this.callUuid) return
+
+        const result = await apiPost(ENDPOINTS.inviteCall, {
+            chat_uuid: this.chatUuid, call_uuid: this.callUuid, target_user_uuid: uuid
+        })
+        if (!result.successful) return this.toast(result.successful_text)
+
+        toggle(this.invitePanelTarget, false)
+    }
+
     persistMediaState() {
         if (!this.callUuid) return
 
@@ -761,6 +875,7 @@ export default class extends Controller {
         if (this.hasLocalVideoTarget) this.localVideoTarget.srcObject = null
         if (this.hasRemoteVideosTarget) this.remoteVideosTarget.replaceChildren()
         if (this.hasActivePanelTarget) toggle(this.activePanelTarget, false)
+        if (this.hasInvitePanelTarget) toggle(this.invitePanelTarget, false)
 
         this.resetState()
     }

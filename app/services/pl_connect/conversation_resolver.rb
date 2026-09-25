@@ -97,6 +97,22 @@ module PlConnect
       scope.order(:login).limit(limit)
     end
 
+    # Resolves a uuid to a user this account may add to a call/conversation -
+    # active, non-deleted, same tenant, not the caller. Unlike #find_by-through-
+    # membership lookups, this deliberately does NOT require the candidate to
+    # already be a member of anything - it is the safe resolution path for
+    # CallService#invite's tenant-wide "ring in a colleague" search, where the
+    # whole point is that the target is not a member yet.
+    def find_addable_user(uuid:)
+      return nil if uuid.blank?
+
+      candidate = User.find_by(uuid: uuid, del_flag: false, active: true)
+      return nil if candidate.blank? || candidate.id == @user.id
+      return nil unless _same_tenant?(candidate)
+
+      candidate
+    end
+
     private
 
     def _resolve_members(member_uuids)

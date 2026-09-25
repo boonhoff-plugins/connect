@@ -103,6 +103,7 @@ module PlConnectWorkspaceHelper
       online: I18n.t("pl_connect.presence.online"),
       away: I18n.t("pl_connect.presence.away"),
       busy: I18n.t("pl_connect.presence.busy"),
+      dnd: I18n.t("pl_connect.presence.dnd"),
       offline: I18n.t("pl_connect.presence.offline")
     }
   end
@@ -136,7 +137,12 @@ module PlConnectWorkspaceHelper
       media_error: I18n.t("pl_connect.call.media_error"),
       start_audio_call: I18n.t("pl_connect.call.start_audio_call"),
       start_video_call: I18n.t("pl_connect.call.start_video_call"),
-      recording_voicemail: I18n.t("pl_connect.call.recording_voicemail")
+      recording_voicemail: I18n.t("pl_connect.call.recording_voicemail"),
+      invite: I18n.t("pl_connect.call.invite"),
+      invite_search_placeholder: I18n.t("pl_connect.call.invite_search_placeholder"),
+      invite_no_results: I18n.t("pl_connect.call.invite_no_results"),
+      invite_search_no_results: I18n.t("pl_connect.call.invite_search_no_results"),
+      invite_error: I18n.t("pl_connect.call.invite_error")
     }
   end
 

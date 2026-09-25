@@ -35,6 +35,11 @@ const TYPING_THROTTLE_MS = 2000
 // fetched.
 const LOAD_MORE_THRESHOLD_PX = 120
 
+// Remembers the last opened conversation across page reloads (see
+// openConversation/connect) - a plain visit to the chat section with no
+// ?chat=<uuid> deep link resumes here instead of landing on the empty state.
+const LAST_CHAT_STORAGE_KEY = "pl_connect:last_chat_uuid"
+
 export default class extends Controller {
   static targets = [
     "conversationList",
@@ -86,7 +91,12 @@ export default class extends Controller {
     this.onActivity = (event) => this.handleActivity(event.detail)
     document.addEventListener("pl-connect:conversation-activity", this.onActivity)
 
-    if (this.initialChatUuidValue) this.openConversation(this.initialChatUuidValue)
+    if (this.initialChatUuidValue) {
+      this.openConversation(this.initialChatUuidValue)
+    } else {
+      const remembered = this._rememberedChatUuid()
+      if (remembered) this.openConversation(remembered)
+    }
   }
 
   disconnect() {
@@ -130,10 +140,12 @@ export default class extends Controller {
     if (this.chatUuid !== uuid) return
 
     if (result.successful !== true) {
+      this._forgetRememberedChatUuid()
       this.showPaneError(result)
       return
     }
 
+    this._rememberChatUuid(uuid)
     this.applyConversationHeader(result.chat)
     this.messages = result.messages || []
     this.hasMore = result.has_more === true
@@ -196,6 +208,33 @@ export default class extends Controller {
           : (this.i18nValue.load_failed || "")
       })
     )
+  }
+
+  // localStorage can throw (private browsing quota, disabled storage) -
+  // resuming the last conversation is a convenience, never worth breaking the
+  // chat over, so every call site here fails silently.
+  _rememberedChatUuid() {
+    try {
+      return localStorage.getItem(LAST_CHAT_STORAGE_KEY) || ""
+    } catch (e) {
+      return ""
+    }
+  }
+
+  _rememberChatUuid(uuid) {
+    try {
+      localStorage.setItem(LAST_CHAT_STORAGE_KEY, uuid)
+    } catch (e) {
+      // Ignored, see _rememberedChatUuid.
+    }
+  }
+
+  _forgetRememberedChatUuid() {
+    try {
+      localStorage.removeItem(LAST_CHAT_STORAGE_KEY)
+    } catch (e) {
+      // Ignored, see _rememberedChatUuid.
+    }
   }
 
   // --- history / paging ----------------------------------------------------

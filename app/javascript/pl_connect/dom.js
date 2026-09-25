@@ -49,6 +49,24 @@ export function toggle(node, visible) {
   if (node) node.classList.toggle("hidden", !visible)
 }
 
+// Background colour class for a presence status dot. Shared by every
+// controller that renders a presence state - the self indicator in the
+// topbar (pl_connect_presence_controller.js) and other users' dots in the
+// call invite picker (pl_connect_call_controller.js) - so all of them stay in
+// sync with a single source of truth: green = online, red = busy (either
+// actually on a call or a manual "do not disturb"), amber = away
+// (self-reported, or "recently seen but no live heartbeat", see
+// PlConnect::PresenceService#display_states_for), grey = offline/unknown.
+export function presenceDotClass(state) {
+  switch (state) {
+    case "online": return "bg-success"
+    case "away": return "bg-warning"
+    case "busy":
+    case "dnd": return "bg-error"
+    default: return "bg-base-content/30"
+  }
+}
+
 // Two uppercase letters for an avatar placeholder. Mirrors the server side
 // helper pl_connect_initials so a conversation looks identical before and
 // after the first live update.

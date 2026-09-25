@@ -12,11 +12,16 @@ module PlConnect
   # A 1:1 conversation (chat_item.f_type == "direct") starts a "direct_call":
   # the other member is invited and the call rings until accepted/declined.
   # A group/channel/team conversation starts a "conference" call instead: it
-  # becomes active immediately with only the initiator in it, every other
-  # member is notified, and they join in (via #accept, same as answering an
-  # invite) whenever they choose to - there is no ringing/declining a
-  # conference the way there is for a direct call. Both call types are a
-  # plain WebRTC mesh (see PlConnectCallItem::MESH_PARTICIPANT_LIMIT for why
+  # becomes active immediately with only the initiator in it. Unlike a direct
+  # call, starting or joining a conference never rings anyone by itself - it
+  # only shows up as a "started a call"/"call.active" system message for
+  # whoever has that conversation open, and as the call_active flag on the
+  # conversation otherwise, so a member who wants in can press the same call
+  # button themselves (#start, above, then joins via #accept since the call is
+  # already running). Ringing a specific person - the callee of a direct call,
+  # or a conference member who is not currently looking at the conversation -
+  # is always the explicit #invite below, never automatic. Both call types are
+  # a plain WebRTC mesh (see PlConnectCallItem::MESH_PARTICIPANT_LIMIT for why
   # that caps out at a handful of participants) and share every method below;
   # #accept in particular does double duty as both "answer an invite" and
   # "join a running conference".
@@ -210,6 +215,7 @@ module PlConnect
 
       ChatBroadcaster.call_state(chat_item: @chat_item, call_item: call.reload, action: "accepted",
                                   extra: { user_uuid: @user.uuid })
+      _resolve_invite(call, user: @user)
 
       { successful: true, successful_text: nil, element: call }
     rescue StandardError => e
@@ -237,6 +243,7 @@ module PlConnect
         ChatBroadcaster.call_state(chat_item: @chat_item, call_item: call, action: "declined",
                                     extra: { user_uuid: @user.uuid })
       end
+      _resolve_invite(call, user: @user)
 
       { successful: true, successful_text: nil, element: call }
     rescue StandardError => e
@@ -302,6 +309,77 @@ module PlConnect
       _handle_exception(e, "update_media_state")
     end
 
+    # Rings one specific conversation member into this already-running call -
+    # the only path that ever rings anyone for a conference (see the class
+    # doc above): starting or joining one yourself never does. Also usable on
+    # a direct call to re-ring a partner who left/declined earlier, as long as
+    # the call itself is still running and not already full.
+    #
+    # @user must already be an active participant of the call themselves -
+    # inviting people into a call you are not even in yourself would let
+    # anyone with the chat/call uuids ring an arbitrary conversation member
+    # without ever having joined.
+    def invite(call:, target_user:)
+      return _failure("Call not found.") if call.blank?
+      return _failure("This call has already ended.") unless call.running?
+      return _failure("This call is full.") if call.full?
+
+      inviter_participant = call.participant_for(@user)
+      return _failure("You must be in the call to invite someone.") if inviter_participant.blank? || inviter_participant.left_at.present?
+
+      # target_user no longer has to already be a member of this conversation -
+      # the tenant-wide directory search (see #invitable_members below) lets
+      # you ring in any colleague, so they are added as a conversation member
+      # here on demand. A "direct" (1:1) conversation cannot gain a third
+      # member though - #full? already rejects this in practice since a direct
+      # call's max_participants is 2, but this gives a clearer message.
+      unless @chat_item.member?(target_user)
+        return _failure("You cannot add another person to a one-to-one call.") if @chat_item.f_type == "direct"
+
+        add_member_result = @chat_item.add_member(c: @c, user: target_user, membership_role: "member")
+        return add_member_result unless add_member_result[:successful]
+      end
+
+      existing = call.participant_for(target_user)
+      if existing.present?
+        return _failure("That person is already in the call.") if existing.left_at.nil?
+
+        update_result = existing.save_element(c: @c, element: { connection_state: "invited", left_at: nil })
+        return update_result unless update_result[:successful]
+      else
+        add_result = _add_participant(call, target_user, connection_state: "invited")
+        return add_result unless add_result[:successful]
+      end
+
+      _notify_invitee(call, target_user)
+      { successful: true, successful_text: nil, element: call }
+    rescue StandardError => e
+      _handle_exception(e, "invite")
+    end
+
+    # Candidates for #invite above. With no search term this is the previous,
+    # unchanged quick list: conversation members who are not already an active
+    # (non-left) participant of `call`. Once the caller types a search term it
+    # widens to the same tenant-wide directory search behind the "new chat"
+    # picker (ConversationResolver#searchable_users) minus current call
+    # participants, so a colleague who was never part of this conversation can
+    # be rung in too - #invite adds them as a conversation member on demand.
+    def invitable_members(call:, term: nil)
+      return User.none if call.blank?
+
+      active_ids = call.active_participants.select(:user_id)
+      clean_term = term.to_s.strip
+
+      scope =
+        if clean_term.present?
+          ConversationResolver.new(c: @c, user: @user).searchable_users(term: clean_term, limit: 20)
+        else
+          User.where(id: @chat_item.active_memberships.select(:user_id))
+        end
+
+      scope.where.not(id: active_ids)
+    end
+
     private
 
     def _start_direct_call
@@ -339,8 +417,9 @@ module PlConnect
 
     # A conference call becomes active immediately with only the initiator in
     # it - there is no "ringing" state for a group, since there is no single
-    # callee to ring. Other members are notified (see _notify_other_members)
-    # and join in via #accept whenever they choose to, up to
+    # callee to ring. Nobody is notified/rung automatically (see the class doc
+    # above and #invite below); other members join in via #accept whenever
+    # they open the conversation and press the call button themselves, up to
     # CallService.mesh_participant_limit.
     def _start_group_call
       result = PlConnectCallItem.new.save_element(c: @c, element: {
@@ -365,7 +444,6 @@ module PlConnect
 
       ChatBroadcaster.call_state(chat_item: @chat_item, call_item: call, action: "started")
       composer.create_system(event_key: "call.started", payload: { login: @user.login.to_s }, call_item_uuid: call.uuid)
-      _notify_other_members(call)
 
       { successful: true, successful_text: nil, element: call }
     end
@@ -398,7 +476,23 @@ module PlConnect
       @chat_item.save_element(c: @c, element: { call_active: false })
 
       ChatBroadcaster.call_state(chat_item: @chat_item, call_item: call, action: reason)
-      composer.create_system(event_key: "call.#{reason}", payload: { duration_seconds: duration }, call_item_uuid: call.uuid)
+      # @user is the person taking the action for "ended"/"declined" (they are
+      # the one hanging up/declining), but for "missed" it is the original
+      # caller (see CallVoicemailTimeoutJob, which hangs up as the initiator) -
+      # so login is passed for all three reasons, but only interpolated into
+      # the "call.ended"/"call.declined" locale strings, not "call.missed",
+      # where it would misleadingly read as if the caller missed their own call.
+      composer.create_system(event_key: "call.#{reason}", payload: { login: @user.login.to_s, duration_seconds: duration }, call_item_uuid: call.uuid)
+
+      # Anyone still "invited" (ringing, not yet answered) when the call ends -
+      # e.g. the voicemail timeout job marking an unanswered direct call
+      # "missed", or the caller hanging up before the callee ever answered -
+      # must stop ringing in every tab they have open, not just wait for the
+      # chat-stream broadcast above (which only reaches tabs that already have
+      # this exact conversation open, see _resolve_invite).
+      call.participants.where(connection_state: "invited", left_at: nil).find_each do |participant|
+        _resolve_invite(call, user: participant.user)
+      end
     end
 
     def _notify_invitee(call, partner)
@@ -418,6 +512,22 @@ module PlConnect
       Rails.logger.error "PlConnect::CallService#_notify_invitee: #{e.class}: #{e.message}"
     end
 
+    # Tells every browser tab/window this user currently has open (not just
+    # whichever one answered) to stop ringing for this call. The presence
+    # stream reaches all of a user's tabs (see PlConnectPresenceChannel),
+    # unlike the chat stream used by ChatBroadcaster.call_state above, which
+    # only reaches tabs that already have this exact conversation open -
+    # without this, accepting or declining a call in one tab left every other
+    # open tab/window ringing indefinitely.
+    def _resolve_invite(call, user:)
+      return if user.blank? || user.uuid.blank?
+
+      PlConnectPresenceChannel.notify(user_uuid: user.uuid, event: "call.invite_resolved",
+                                      payload: { call_uuid: call.uuid })
+    rescue StandardError => e
+      Rails.logger.error "PlConnect::CallService#_resolve_invite: #{e.class}: #{e.message}"
+    end
+
     # Schedules CallVoicemailTimeoutJob to end this (still ringing) direct
     # call as missed and prompt the caller for a voicemail if nobody answers
     # in time. The job itself re-checks call.state before doing anything, so
@@ -431,29 +541,6 @@ module PlConnect
         .perform_later(call_uuid: call.uuid)
     rescue StandardError => e
       Rails.logger.error "PlConnect::CallService#_schedule_voicemail_timeout: #{e.class}: #{e.message}"
-    end
-
-    # Notifies every other active member of a group/channel/team conversation
-    # that a conference call has started - unlike _notify_invitee this is not
-    # a personal ring: there is nobody who can be "missed", the call simply
-    # keeps running whether or not any given member joins it.
-    def _notify_other_members(call)
-      @chat_item.active_memberships.where.not(user_id: @user.id).find_each do |membership|
-        next if membership.user.blank? || membership.user.uuid.blank?
-
-        PlConnectPresenceChannel.notify(
-          user_uuid: membership.user.uuid,
-          event: "call.invite",
-          payload: {
-            call_uuid: call.uuid,
-            chat_uuid: @chat_item.uuid,
-            chat_title: @chat_item.display_title_for(membership.user),
-            caller_login: @user.login.to_s
-          }
-        )
-      end
-    rescue StandardError => e
-      Rails.logger.error "PlConnect::CallService#_notify_other_members: #{e.class}: #{e.message}"
     end
 
     def composer

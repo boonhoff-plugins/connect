@@ -52,8 +52,13 @@ class PlConnectChatMessageItem < ApplicationRecord
     where("(sent_at < :sent_at) OR (sent_at = :sent_at AND id < :id)", sent_at: sent_at, id: id.to_i)
   end
 
+  # "call_event" rows are system-generated too (see the class doc above) and
+  # must be rendered the same way as "system" rows - this used to only check
+  # for "system" and silently dropped system_event_data for every call event
+  # (see MessageSerializer#as_json), which is why call messages showed the
+  # raw, un-interpolated "%{login}" placeholder instead of a real name.
   def system_message?
-    f_type == "system"
+    %w[system call_event].include?(f_type)
   end
 
   def edited?

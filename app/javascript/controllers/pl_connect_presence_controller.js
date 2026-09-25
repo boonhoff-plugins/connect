@@ -20,13 +20,14 @@
 // hidden - that also means an idle tab does not keep a user "online" for hours.
 import { Controller } from "@hotwired/stimulus"
 import plConnectConsumer from "../pl_connect/cable"
+import { presenceDotClass } from "../pl_connect/dom"
 
 // Has to stay clearly below PresenceService's TTL, otherwise the entry expires
 // between two beats and the user flickers offline.
 const HEARTBEAT_MS = 30000
 
 export default class extends Controller {
-  static targets = [ "indicator", "label" ]
+  static targets = ["indicator", "label"]
 
   static values = {
     active: Boolean,
@@ -36,6 +37,10 @@ export default class extends Controller {
   connect() {
     if (this.activeValue !== true) return
 
+    // Set (and kept) whenever the user picks a status from their own
+    // name/avatar menu (see setManualState below) - overrides the automatic,
+    // tab-visibility based state below until they pick "Online" again.
+    this.manualState = null
     this.state = "online"
     this.subscribe()
 
@@ -55,7 +60,7 @@ export default class extends Controller {
 
     this.subscription = plConnectConsumer().subscriptions.create("PlConnectPresenceChannel", {
       connected() {
-        controller.setState("online")
+        controller.setState(controller.manualState || "online")
         controller.startHeartbeat()
       },
 
@@ -91,8 +96,13 @@ export default class extends Controller {
   }
 
   // A hidden tab reports "away" once and then stops beating, so the entry
-  // expires instead of claiming the user is at their desk.
+  // expires instead of claiming the user is at their desk. A manual status
+  // (do not disturb / away, picked from the user's own name menu) always
+  // wins over this automatic behaviour - hiding the tab must not silently
+  // clear a "do not disturb" the user explicitly chose.
   handleVisibilityChange() {
+    if (this.manualState) return
+
     if (document.visibilityState === "hidden") {
       this.setState("away")
       this.beat()
@@ -103,6 +113,21 @@ export default class extends Controller {
     }
   }
 
+  // Action for the "own name" status menu in the topbar (see
+  // _topbar.html.erb). data-pl-connect-presence-state is "online" (clears the
+  // manual override, back to automatic tab-visibility based state), "away" or
+  // "dnd" (do not disturb).
+  setManualState(event) {
+    const requested = event.currentTarget?.dataset?.plConnectPresenceState
+    if (!requested) return
+
+    this.manualState = requested === "online" ? null : requested
+    this.setState(this.manualState || "online")
+    this.beat()
+
+    if (!this.heartbeatTimer && document.visibilityState !== "hidden") this.startHeartbeat()
+  }
+
   setState(state) {
     this.state = state
     this.renderIndicator(state)
@@ -110,20 +135,11 @@ export default class extends Controller {
 
   renderIndicator(state) {
     if (this.hasIndicatorTarget) {
-      this.indicatorTarget.className = `inline-block h-2 w-2 rounded-full ${this.colorFor(state)}`
+      this.indicatorTarget.className = `inline-block h-2 w-2 rounded-full ${presenceDotClass(state)}`
     }
 
     if (this.hasLabelTarget) {
       this.labelTarget.textContent = this.i18nValue[state] || ""
-    }
-  }
-
-  colorFor(state) {
-    switch (state) {
-      case "online": return "bg-success"
-      case "away": return "bg-warning"
-      case "busy": return "bg-error"
-      default: return "bg-base-content/30"
     }
   }
 
@@ -149,6 +165,15 @@ export default class extends Controller {
     // for the currently open conversation still works via the chat stream.
     if (payload.event === "call.invite") {
       document.dispatchEvent(new CustomEvent("pl-connect:call-invite", { bubbles: false, detail: payload }))
+    }
+
+    // Fired for every browser tab/window of the invited user once the call
+    // was answered/declined/ended in ANY of them (see
+    // PlConnect::CallService#_resolve_invite) - without this, a call accepted
+    // or declined in one tab kept ringing forever in every other open tab of
+    // the same session, since each tab has its own incomingInvite state.
+    if (payload.event === "call.invite_resolved") {
+      document.dispatchEvent(new CustomEvent("pl-connect:call-invite-resolved", { bubbles: false, detail: payload }))
     }
   }
 }

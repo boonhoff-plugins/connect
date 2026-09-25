@@ -46,6 +46,8 @@ post "pl_connect_api/answer_call"        => "pl_connect_api#answer_call",       
 post "pl_connect_api/hangup_call"        => "pl_connect_api#hangup_call",        as: :pl_connect_api_hangup_call
 post "pl_connect_api/call_media_state"   => "pl_connect_api#call_media_state",   as: :pl_connect_api_call_media_state
 post "pl_connect_api/upload_voicemail"   => "pl_connect_api#upload_voicemail",   as: :pl_connect_api_upload_voicemail
+get  "pl_connect_api/call_invitable_users" => "pl_connect_api#call_invitable_users", as: :pl_connect_api_call_invitable_users
+post "pl_connect_api/invite_call"        => "pl_connect_api#invite_call",        as: :pl_connect_api_invite_call
 
 # --- Workspace shell --------------------------------------------------------
 #

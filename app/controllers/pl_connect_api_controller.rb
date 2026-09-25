@@ -367,6 +367,55 @@ class PlConnectApiController < ApplicationController
     _render_exception(e, "call_media_state")
   end
 
+  # GET /pl_connect_api/call_invitable_users
+  # Conversation members not already an active participant of the given call -
+  # candidates for the active call panel's own "invite a colleague" picker
+  # (see PlConnect::CallService#invitable_members). Optional `term` widens
+  # this to a tenant-wide directory search, as opposed to the plain
+  # tenant-wide search behind the "new chat"/"start a call" pickers (#users
+  # above), which is not scoped to a running call's current participants.
+  def call_invitable_users
+    chat = resolver.find(params[:chat_uuid])
+    return _render_not_found if chat.blank?
+
+    call = _find_call(chat, params[:call_uuid])
+    return _render_not_found if call.blank?
+
+    users = call_service(chat).invitable_members(call: call, term: params[:term]).to_a
+    payload = users.map { |user| { uuid: user.uuid, login: user.login.to_s, title: user.try(:full_name).to_s } }
+
+    render json: { successful: true, users: payload, presence: _presence_for(payload.map { |entry| entry[:uuid] }) }
+  rescue StandardError => e
+    _render_exception(e, "call_invitable_users")
+  end
+
+  # POST /pl_connect_api/invite_call
+  # Explicitly rings one specific user into an already-running call - the
+  # only way anyone is ever rung for a group/channel/team conversation's call
+  # (see PlConnect::CallService#invite: starting/joining a conference yourself
+  # never rings anyone). target_user is resolved through
+  # ConversationResolver#find_addable_user rather than a bare
+  # User.find_by(uuid:), so only an active user of the caller's own tenant can
+  # ever be looked up here - they do not have to be a conversation member
+  # already, CallService#invite adds them on demand.
+  def invite_call
+    chat = resolver.find(params[:chat_uuid])
+    return _render_not_found if chat.blank?
+
+    call = _find_call(chat, params[:call_uuid])
+    return _render_not_found if call.blank?
+
+    target_user = resolver.find_addable_user(uuid: params[:target_user_uuid])
+    return _render_not_found if target_user.blank?
+
+    result = call_service(chat).invite(call: call, target_user: target_user)
+    return _render_failure(result[:successful_text]) unless result[:successful]
+
+    render json: { successful: true }
+  rescue StandardError => e
+    _render_exception(e, "invite_call")
+  end
+
   # ---------------------------------------------------------- attachments ---
 
   # POST /pl_connect_api/upload_attachment
@@ -564,7 +613,7 @@ class PlConnectApiController < ApplicationController
   def _presence_for(uuids)
     return {} unless PlConnect::PresenceService.active?
 
-    PlConnect::PresenceService.states_for(Array(uuids))
+    PlConnect::PresenceService.display_states_for(Array(uuids))
   end
 
   # --- responses -----------------------------------------------------------
