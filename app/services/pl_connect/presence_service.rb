@@ -107,26 +107,34 @@ module PlConnect
       #       taken from the client's self-reported heartbeat state, so it
       #       cannot go stale if a tab crashes mid-call (a self-reported "busy"
       #       that never gets cleared would otherwise show red forever).
-      #     * "online" (green) or a manual "dnd"/"away" override - whatever the
+      #     * a persisted manual override (PlConnectUserSetting#chat_status -
+      #       "dnd"/"away"/"offline") - an explicit, durable user choice (see
+      #       that model's own doc) that wins over whatever the live heartbeat
+      #       says, so "appear offline" actually shows offline even while the
+      #       browser tab is open and connected.
+      #     * "online" (green) or a self-reported "away" - whatever the
       #       client's own heartbeat last reported (see #states_for), when
-      #       still live.
+      #       still live and no manual override is set.
       #     * "away" (amber)  - no live heartbeat, but seen within the last
       #       LAST_SEEN_TTL_SECONDS (e.g. a crashed tab or a dropped network
       #       connection) - "was here a while ago, might still be around".
-      #     * "offline" (grey) - neither: not logged in, logged out cleanly, or
-      #       simply not seen for a long time.
+      #     * "offline" (grey) - none of the above: not logged in, logged out
+      #       cleanly, or simply not seen for a long time.
       def display_states_for(user_uuids)
         uuids = Array(user_uuids).map(&:to_s).reject(&:blank?).uniq
         return {} if uuids.empty?
 
         live = states_for(uuids)
         busy = _busy_call_uuids(uuids)
+        manual = _manual_status_for(uuids)
         recent = _recently_seen_uuids(uuids)
 
         uuids.each_with_object({}) do |uuid, result|
           result[uuid] =
             if busy.include?(uuid)
               "busy"
+            elsif manual.key?(uuid)
+              manual[uuid]
             elsif live.key?(uuid)
               live[uuid] == "dnd" ? "busy" : live[uuid]
             elsif recent.include?(uuid)
@@ -135,6 +143,15 @@ module PlConnect
               "offline"
             end
         end
+      end
+
+      # Whether this user manually set themselves to "do not disturb" - used to
+      # actually block ringing them (CallService#_start_direct_call/#invite)
+      # rather than merely showing a red dot that a caller can ignore. Reads
+      # the persisted preference directly (not the live heartbeat), so this
+      # still holds even if the user is not currently connected at all.
+      def dnd?(user_uuid)
+        _manual_status_for([ user_uuid ])[user_uuid.to_s] == "dnd"
       end
 
       # Configurable through the LookupItem presence_ttl_seconds; falls back to
@@ -175,6 +192,21 @@ module PlConnect
       rescue StandardError => e
         Rails.logger.error "PlConnect::PresenceService._busy_call_uuids: #{e.class}: #{e.message}"
         []
+      end
+
+      # @return [Hash{String => String}] user uuid => "away"/"dnd"/"offline"
+      # for the uuids that have an explicit, persisted override set (see
+      # PlConnectUserSetting) - never includes a uuid with no override (blank
+      # chat_status, i.e. "automatic").
+      def _manual_status_for(user_uuids)
+        PlConnectUserSetting
+          .where(user_uuid: user_uuids, active: true, del_flag: false)
+          .where.not(chat_status: [ nil, "" ])
+          .pluck(:user_uuid, :chat_status)
+          .to_h
+      rescue StandardError => e
+        Rails.logger.error "PlConnect::PresenceService._manual_status_for: #{e.class}: #{e.message}"
+        {}
       end
 
       def _recently_seen_uuids(user_uuids)

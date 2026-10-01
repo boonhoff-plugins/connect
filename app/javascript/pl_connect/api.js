@@ -24,6 +24,7 @@ export const ENDPOINTS = {
   search: "/pl_connect_api/search",
   users: "/pl_connect_api/users",
   presence: "/pl_connect_api/presence",
+  setStatus: "/pl_connect_api/set_status",
   downloadAttachment: "/pl_connect_api/download_attachment",
   openDirect: "/pl_connect_api/open_direct",
   createGroup: "/pl_connect_api/create_group",

@@ -23,7 +23,7 @@
 import { Controller } from "@hotwired/stimulus"
 import plConnectConsumer from "../pl_connect/cable"
 import { ENDPOINTS, apiGet, apiPost, apiUpload } from "../pl_connect/api"
-import { clear, dayKey, dayLabel, debounce, el, toggle } from "../pl_connect/dom"
+import { clear, dayKey, dayLabel, debounce, el, toggle, presenceDotClass } from "../pl_connect/dom"
 import MessageRenderer from "../pl_connect/message_renderer"
 
 // How long after the last keystroke the "is typing" signal is revoked.
@@ -40,6 +40,13 @@ const LOAD_MORE_THRESHOLD_PX = 120
 // ?chat=<uuid> deep link resumes here instead of landing on the empty state.
 const LAST_CHAT_STORAGE_KEY = "pl_connect:last_chat_uuid"
 
+// How often the presence dots already on screen (sidebar + open chat header)
+// are refreshed - presence/status data is only ever fetched once, when a list
+// is loaded or a conversation is opened, so without this another user's
+// status change (e.g. picking "Do not disturb") would never reach a tab that
+// is already sitting on the conversation list until it is reloaded.
+const PRESENCE_REFRESH_MS = 30000
+
 export default class extends Controller {
   static targets = [
     "conversationList",
@@ -47,6 +54,7 @@ export default class extends Controller {
     "conversation",
     "conversationTitle",
     "conversationSubtitle",
+    "conversationPresence",
     "messages",
     "loadingOlder",
     "typing",
@@ -97,10 +105,13 @@ export default class extends Controller {
       const remembered = this._rememberedChatUuid()
       if (remembered) this.openConversation(remembered)
     }
+
+    this.presenceRefreshTimer = setInterval(() => this.refreshPresence(), PRESENCE_REFRESH_MS)
   }
 
   disconnect() {
     document.removeEventListener("pl-connect:conversation-activity", this.onActivity)
+    clearInterval(this.presenceRefreshTimer)
     this.teardownSubscription()
   }
 
@@ -146,7 +157,7 @@ export default class extends Controller {
     }
 
     this._rememberChatUuid(uuid)
-    this.applyConversationHeader(result.chat)
+    this.applyConversationHeader(result.chat, result.presence || {})
     this.messages = result.messages || []
     this.hasMore = result.has_more === true
 
@@ -179,10 +190,23 @@ export default class extends Controller {
     return this.conversationButtons().find((button) => button.dataset.plConnectConversationUuid === uuid) || null
   }
 
-  applyConversationHeader(chat) {
+  applyConversationHeader(chat, presence = {}) {
     if (!chat) return
 
+    // Tracked so refreshPresence() can keep this dot current without having
+    // to re-fetch/re-render the whole header on every poll.
+    this.currentPartnerUuid = chat.f_type === "direct" ? chat.partner_uuid : null
+
     if (this.hasConversationTitleTarget) this.conversationTitleTarget.textContent = chat.title || ""
+
+    if (this.hasConversationPresenceTarget) {
+      const state = chat.f_type === "direct" ? presence[chat.partner_uuid] : undefined
+      if (state !== undefined) {
+        this._renderHeaderPresenceDot(state)
+      } else {
+        this.conversationPresenceTarget.className = "hidden h-2.5 w-2.5 shrink-0 rounded-full"
+      }
+    }
 
     if (this.hasConversationSubtitleTarget) {
       const parts = []
@@ -196,6 +220,49 @@ export default class extends Controller {
     // honest than an error after the fact.
     const writable = chat.read_only !== true && chat.archived !== true
     toggle(this.formTarget, writable)
+  }
+
+  // Re-fetches presence for every partner currently rendered on screen
+  // (sidebar rows + the open chat header, see applyPresenceDots) - presence/
+  // status is otherwise only ever fetched once, when a list loads or a
+  // conversation opens, so another user's status change (e.g. picking
+  // "Do not disturb") would never reach an already-open tab without this.
+  async refreshPresence() {
+    const uuids = new Set()
+    this.conversationButtons().forEach((button) => {
+      const uuid = button.dataset.plConnectPartnerUuid
+      if (uuid) uuids.add(uuid)
+    })
+    if (this.currentPartnerUuid) uuids.add(this.currentPartnerUuid)
+    if (uuids.size === 0) return
+
+    const result = await apiGet(ENDPOINTS.presence, { uuids: Array.from(uuids) })
+    if (result.successful !== true) return
+
+    this.applyPresenceDots(result.presence || {})
+  }
+
+  applyPresenceDots(presence) {
+    this.conversationButtons().forEach((button) => {
+      const uuid = button.dataset.plConnectPartnerUuid
+      const state = uuid ? presence[uuid] : undefined
+      const dot = button.querySelector("[data-pl-connect-presence-dot]")
+      if (!dot || state === undefined) return
+
+      dot.className = `absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-base-100 ${presenceDotClass(state)}`
+      dot.title = this.i18nValue[state] || state
+    })
+
+    if (this.currentPartnerUuid && presence[this.currentPartnerUuid] !== undefined) {
+      this._renderHeaderPresenceDot(presence[this.currentPartnerUuid])
+    }
+  }
+
+  _renderHeaderPresenceDot(state) {
+    if (!this.hasConversationPresenceTarget) return
+
+    this.conversationPresenceTarget.className = `h-2.5 w-2.5 shrink-0 rounded-full ${presenceDotClass(state)}`
+    this.conversationPresenceTarget.title = this.i18nValue[state] || state
   }
 
   showPaneError(result) {
@@ -890,6 +957,7 @@ export default class extends Controller {
         })
       )
 
+      const presence = result.presence || {}
       people.forEach((person) => {
         this.searchResultsTarget.appendChild(
           el("button", {
@@ -897,6 +965,7 @@ export default class extends Controller {
             attrs: { type: "button" },
             dataset: { action: "pl-connect-chat#openSearchPerson", plConnectUserUuid: person.uuid },
             children: [
+              el("span", { class: `inline-block h-2 w-2 shrink-0 rounded-full ${presenceDotClass(presence[person.uuid])}` }),
               el("span", { class: "truncate text-sm", text: person.title || person.login || "" })
             ]
           })

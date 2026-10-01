@@ -106,6 +106,13 @@ class PlConnectWorkspaceController < ApplicationController
     @c[:pl_connect_user] = current_chat_user
     @c[:pl_connect_presence_active] = PlConnect::PresenceService.active?
     @c[:pl_connect_call_active] = PlConnect::CallService.active?
+    # The persisted manual status override (see PlConnectUserSetting) - blank
+    # when none is set, meaning "automatic". Rendered into the presence
+    # Stimulus controller's initialStatusValue so a reload restores the
+    # chosen status immediately instead of flashing back to "online" (see
+    # pl_connect_presence_controller.js#connect).
+    @c[:pl_connect_initial_status] =
+      current_chat_user.present? ? PlConnectUserSetting.find_by(user_id: current_chat_user.id)&.chat_status.to_s : ""
   end
 
   # The workspace only ever operates on the logged-in user. Everything that
@@ -164,6 +171,13 @@ class PlConnectWorkspaceController < ApplicationController
     end
 
     @c[:pl_connect_total_unread] = PlConnect::ReadStateService.new(c: @c, user: user).total_unread
+
+    # Presence dot for the server-rendered sidebar's first paint (see
+    # _conversation_list.html.erb) - only direct (1:1) conversations have a
+    # single "other person" whose status makes sense to show.
+    partner_uuids = @c[:pl_connect_conversations].filter_map { |conversation| conversation[:partner_uuid] }
+    @c[:pl_connect_conversations_presence] =
+      PlConnect::PresenceService.active? ? PlConnect::PresenceService.display_states_for(partner_uuids) : {}
   end
 
   # --- Calendar ----------------------------------------------------------

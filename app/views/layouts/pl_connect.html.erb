@@ -100,6 +100,7 @@
          data-pl-connect-chat-i18n-value="<%= pl_connect_chat_i18n.to_json %>"
          data-pl-connect-chat-initial-chat-uuid-value="<%= @c[:pl_connect_initial_chat_uuid] %>"
          data-pl-connect-presence-active-value="<%= @c[:pl_connect_presence_active] ? "true" : "false" %>"
+         data-pl-connect-presence-initial-status-value="<%= @c[:pl_connect_initial_status] %>"
          data-pl-connect-presence-i18n-value="<%= pl_connect_presence_i18n.to_json %>"
          data-pl-connect-call-active-value="<%= @c[:pl_connect_call_active] ? "true" : "false" %>"
          data-pl-connect-call-viewer-uuid-value="<%= @c[:pl_connect_user]&.uuid %>"

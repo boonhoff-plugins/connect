@@ -108,6 +108,19 @@ module PlConnectWorkspaceHelper
     }
   end
 
+  # Background colour class for a presence status dot, server-rendered variant
+  # of dom.js#presenceDotClass - used for the sidebar's first paint
+  # (_conversation_list.html.erb), kept in sync with that function by hand
+  # since one is Ruby and the other JS.
+  def pl_connect_presence_dot_class(state)
+    case state.to_s
+    when "online" then "bg-success"
+    when "away" then "bg-warning"
+    when "busy", "dnd" then "bg-error"
+    else "bg-base-content/30"
+    end
+  end
+
   # Translated strings and STUN/TURN configuration for the call Stimulus
   # controller. ice_servers is embedded here (rather than fetched separately)
   # so a call can be answered from an incoming-call banner without an extra
@@ -161,7 +174,8 @@ module PlConnectWorkspaceHelper
     {
       uuid: call.uuid,
       chat_uuid: call.chat_item.uuid,
-      video_active: participant.present? && participant.video_active == true
+      video_active: participant.present? && participant.video_active == true,
+      sfu: PlConnect::SfuService.payload_for(call: call, user: user)
     }.to_json
   end
 

@@ -90,7 +90,8 @@ class PlConnectApiController < ApplicationController
       successful: true,
       chat: PlConnect::MessageSerializer.conversation_as_json(chat: chat, viewer: current_chat_user),
       messages: page.map { |m| PlConnect::MessageSerializer.as_json(message: m, viewer: current_chat_user) },
-      has_more: page.size == page_size
+      has_more: page.size == page_size,
+      presence: _presence_for([ chat.partner_for(current_chat_user)&.uuid ].compact)
     }
   rescue StandardError => e
     _render_exception(e, "messages")
@@ -133,10 +134,13 @@ class PlConnectApiController < ApplicationController
     term = params[:term].to_s.strip
     return render json: { successful: true, messages: [], people: [] } if term.length < 2
 
+    people = _search_people(term)
+
     render json: {
       successful: true,
       messages: _search_messages(term),
-      people: _search_people(term)
+      people: people,
+      presence: _presence_for(people.map { |person| person[:uuid] })
     }
   rescue StandardError => e
     _render_exception(e, "search")
@@ -163,6 +167,31 @@ class PlConnectApiController < ApplicationController
     render json: { successful: true, presence: _presence_for(params[:uuids]) }
   rescue StandardError => e
     _render_exception(e, "presence")
+  end
+
+  # POST /pl_connect_api/set_status
+  #
+  # Persists the caller's own manually chosen chat status (see
+  # PlConnectUserSetting/PlConnect::PresenceService#display_states_for) -
+  # "online" (or blank) clears the override and returns to the automatic,
+  # tab-visibility based state; "away"/"dnd"/"offline" set an explicit,
+  # durable override that survives a reload and is visible to every other
+  # user wherever presence is shown, not just in this browser tab.
+  def set_status
+    return head :unauthorized if current_chat_user.blank?
+
+    requested = params[:status].to_s
+    normalized = PlConnectUserSetting::CHAT_STATUSES.include?(requested) ? requested : nil
+
+    setting = PlConnectUserSetting.find_or_initialize_by(user_id: current_chat_user.id)
+    result = setting.save_element(c: @c, create_history: false, element: {
+      user_id: current_chat_user.id, user_uuid: current_chat_user.uuid, chat_status: normalized
+    })
+    return _render_failure(result[:successful_text]) unless result[:successful]
+
+    render json: { successful: true, status: normalized.to_s }
+  rescue StandardError => e
+    _render_exception(e, "set_status")
   end
 
   # --------------------------------------------------------------- write ----
@@ -620,7 +649,8 @@ class PlConnectApiController < ApplicationController
       started_at: call.started_at&.iso8601,
       ended_at: call.ended_at&.iso8601,
       duration_seconds: call.duration_seconds,
-      ice_servers: PlConnect::CallService.ice_servers
+      ice_servers: PlConnect::CallService.ice_servers,
+      sfu: PlConnect::SfuService.payload_for(call: call, user: current_chat_user)
     }
   end
 

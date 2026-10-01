@@ -23,6 +23,7 @@ get  "pl_connect_api/thread"             => "pl_connect_api#thread",            
 get  "pl_connect_api/search"             => "pl_connect_api#search",             as: :pl_connect_api_search
 get  "pl_connect_api/users"              => "pl_connect_api#users",              as: :pl_connect_api_users
 get  "pl_connect_api/presence"           => "pl_connect_api#presence",           as: :pl_connect_api_presence
+post "pl_connect_api/set_status"         => "pl_connect_api#set_status",         as: :pl_connect_api_set_status
 get  "pl_connect_api/download_attachment" => "pl_connect_api#download_attachment", as: :pl_connect_api_download_attachment
 
 post "pl_connect_api/open_direct"        => "pl_connect_api#open_direct",        as: :pl_connect_api_open_direct

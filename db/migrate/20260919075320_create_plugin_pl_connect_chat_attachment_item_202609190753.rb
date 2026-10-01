@@ -2,6 +2,7 @@
 
 # CreatePluginPlConnectChatAttachmentItem202609190753
 class CreatePluginPlConnectChatAttachmentItem202609190753 < ActiveRecord::Migration[8.1]
+  include Db::PluginItemTables
   def up
     # --- ---------------- ---
     # --- create variables ---
@@ -51,189 +52,18 @@ class CreatePluginPlConnectChatAttachmentItem202609190753 < ActiveRecord::Migrat
   SYSTEM[:server][:default][:enable_strong_parameter_filtering] = false
 
 
+
     # --- ------------------- ---
-    # --- generate main table ---
+    # --- generate main table --- (see Db::PluginItemTables)
     # --- ------------------- ---
 
-    unless data_source_exists?(table_name)
-      create_table(table_name, id: false, primary_key: :id, options:)  do |t|
-        t.primary_key :id, :unsigned_integer, null: false, auto_increment: true
-        t.timestamps
-      end
-    end
-
-    add_column(table_name, :uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: uuid_size, comment: 'contains the universally unique identifier of this element') unless column_exists?(table_name, :uuid)
-
-    add_column(table_name, :tenant_id, :unsigned_integer, comment: 'reference field which could contain a reference to a tenant (by default the main tenant of the user)') unless column_exists?(table_name, :tenant_id)
-    add_column(table_name, :tenant_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: 61, comment: 'reference field which could contain a reference to a tenant (by default the main tenant of the user)') unless column_exists?(table_name, :tenant_uuid)
-
-    add_column(table_name, :extension_item_id, :unsigned_integer, comment: 'this field contains the user id of the user who has locked this data set.') unless column_exists?(table_name, :extension_item_id)
-    add_column(table_name, :extension_item_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: 68, comment: 'this field contains the user id of the user who has locked this data set.') unless column_exists?(table_name, :extension_item_uuid)
-
-    add_column(table_name, :parent_id, :unsigned_integer, comment: 'can be used to reference to an parent element of the same table') unless column_exists?(table_name, :parent_id)
-
-    add_column(table_name, :parent_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: uuid_size, comment: 'contains the universally unique identifier of the parent element') unless column_exists?(table_name, :parent_uuid)
-    add_column(table_name, :parent_version, :double, precision: 10, scale: 2, comment: 'this field contains an integer of the data set version of the parent data set') unless column_exists?(table_name, :parent_version)
-    add_column(table_name, :decimal_position, :double, precision: 10, scale: 2, comment: 'can be used to sort elements with the same parent_id') unless column_exists?(table_name, :decimal_position)
-
-    add_column(table_name, :reference_model, :string, collation: collation_latin1, charset: charset_latin1, limit: 255, comment: 'generic attribute which can contain a ruby model class, which this data set is referenced (need reference_id)') unless column_exists?(table_name, :reference_model)
-    add_column(table_name, :reference_id, :unsigned_integer, comment: 'generic attribute which can contain a id, which this data set is referenced (for 1:1-Relation, need reference_model)') unless column_exists?(table_name, :reference_id)
-    add_column(table_name, :reference_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: 150, comment: 'contains the universally unique identifier of the reference element') unless column_exists?(table_name, :reference_uuid)
-    add_column(table_name, :reference_version, :double, precision: 10, scale: 2, comment: 'this field contains an integer of the data set version of the reference data set') unless column_exists?(table_name, :reference_version)
-    add_column(table_name, :reference_parent_id, :unsigned_integer, comment: 'generic attribute which can contain a id, which this data set is referenced (for 1:n-Relation,need reference_model)') unless column_exists?(table_name, :reference_parent_id)
-    add_column(table_name, :reference_parent_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: 150, comment: 'contains the universally unique identifier of the reference element') unless column_exists?(table_name, :reference_parent_uuid)
-    add_column(table_name, :reference_parent_version, :double, precision: 10, scale: 2, comment: 'this field contains an integer of the data set version of the parent reference data set') unless column_exists?(table_name, :reference_version)
-
-    add_column(table_name, :active, :boolean, default: 1, comment: 'Is these data set active') unless column_exists?(table_name, :active)
-    add_column(table_name, :del_flag, :boolean, default: 0, comment: 'Is these data set logical deleted') unless column_exists?(table_name, :del_flag)
-
-    add_column(table_name, :creator_id, :unsigned_integer, comment: 'this field contains the user id of the creator of these element.') unless column_exists?(table_name, :creator_id)
-    add_column(table_name, :updater_id, :unsigned_integer, comment: 'this field contains the user id of the user who has changed this data set.') unless column_exists?(table_name, :updater_id)
-    add_column(table_name, :lock_user_id, :unsigned_integer, comment: 'this field contains the user id of the user who has locked this data set.') unless column_exists?(table_name, :lock_user_id)
-
-    add_column(table_name, :creator_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: 58, comment: 'this field contains the user id of the creator of these element.') unless column_exists?(table_name, :creator_uuid)
-    add_column(table_name, :updater_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: 58, comment: 'this field contains the user id of the user who has changed this data set.') unless column_exists?(table_name, :updater_uuid)
-    add_column(table_name, :lock_user_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: 58, comment: 'this field contains the user id of the user who has locked this data set.') unless column_exists?(table_name, :lock_user_uuid)
-
-    add_column(table_name, :locked_at, :datetime, comment: 'datetime when this data set was locked.') unless column_exists?(table_name, :locked_at)
-    add_column(table_name, :save_info, :text, collation:, charset:, limit: 16.megabytes, comment: 'this field contains json object change information (reference to the history data set, which fields have change, last value of the field, quick changes.') unless column_exists?(table_name, :save_info)
-    add_column(table_name, :version, :double, precision: 10, scale: 2, comment: 'this field contains an integer of the data set version of this data set') unless column_exists?(table_name, :version)
-    add_column(table_name, :tenant_independent, :boolean, default: false, comment: 'When true, this record is accessible across all tenants regardless of tenant restriction.') unless column_exists?(table_name, :tenant_independent)
-
-    add_column(table_name, :f_type, :string, collation: collation_latin1, charset: charset_latin1, limit: 100, comment: 'can be used to group this data set') unless column_exists?(table_name, :f_type)
-    add_column(table_name, :state, :string, collation: collation_latin1, charset: charset_latin1, limit: 100, comment: 'can be used to give a data set a state') unless column_exists?(table_name, :state)
-    add_column(table_name, :tags, :text, collation: collation_latin1, charset: charset_latin1, limit: 65_535, comment: 'can contain some tags for a search/filter') unless column_exists?(table_name, :tags)
-    add_column(table_name, :name, :string, collation:, charset:, limit: 150, comment: 'unique/shortcut name of an data set (example MPLS-004M)') unless column_exists?(table_name, :name)
-
-    add_column(table_name, :hierarchy_name, :text, collation:, charset:, limit: 65_535, comment: 'displayed hierarchy name') unless column_exists?(table_name, :hierarchy_name)
-    add_column(table_name, :yaml_key, :text, collation:, charset:, limit: 65_535, comment: 'yaml key with with this name and parent names point separated like parent_name.name  ') unless column_exists?(table_name, :yaml_key)
-    add_column(table_name, :language, :string, default: I18n.locale, collation: collation_latin1, charset: charset_latin1, limit: 2, comment: 'default language of this data set') unless column_exists?(table_name, :language)
-
-    add_column(table_name, :title, :string, collation:, charset:, limit: 150, comment: 'title of an data set (example: Multiconnect 4 Megabyte) ') unless column_exists?(table_name, :title)
-    add_column(table_name, :description, :text, collation:, charset:, limit: 65_535, comment: 'Data set of an data set (example: this is a Multiconnect 4 Megabyte) ') unless column_exists?(table_name, :description)
-
-    add_foreign_key(table_name, table_name, column: :parent_id, primary_key: :id, on_delete: :cascade) unless index_exists?(table_name, :parent_id)
-    # add_foreign_key(table_name, table_name, column: :parent_uuid, primary_key: :uuid, on_delete: :cascade) unless index_exists?(table_name, :parent_uuid)
-
-    add_foreign_key(table_name, :tenants, column: :tenant_id, primary_key: :id, on_delete: :nullify) unless index_exists?(table_name, :tenant_id)
-    add_foreign_key(table_name, :tenants, column: :tenant_uuid, primary_key: :uuid, on_delete: :nullify) unless index_exists?(table_name, :tenant_uuid)
-
-    add_foreign_key(table_name, :extension_items, column: :extension_item_id, primary_key: :id, on_delete: :nullify) unless index_exists?(table_name, :extension_item_id)
-    add_foreign_key(table_name, :extension_items, column: :extension_item_uuid, primary_key: :uuid, on_delete: :nullify) unless index_exists?(table_name, :extension_item_uuid)
-
-    add_foreign_key(table_name, :users, column: :creator_id, primary_key: :id, on_delete: :nullify) unless index_exists?(table_name, :creator_id)
-    add_foreign_key(table_name, :users, column: :creator_uuid, primary_key: :uuid, on_delete: :nullify) unless index_exists?(table_name, :creator_uuid)
-    add_foreign_key(table_name, :users, column: :updater_id, primary_key: :id, on_delete: :nullify) unless index_exists?(table_name, :updater_id)
-    add_foreign_key(table_name, :users, column: :updater_uuid, primary_key: :uuid, on_delete: :nullify) unless index_exists?(table_name, :updater_uuid)
-    add_foreign_key(table_name, :users, column: :lock_user_id, primary_key: :id, on_delete: :nullify) unless index_exists?(table_name, :lock_user_id)
-    add_foreign_key(table_name, :users, column: :lock_user_uuid, primary_key: :uuid, on_delete: :nullify) unless index_exists?(table_name, :lock_user_uuid)
-
-    add_index table_name, :uuid, unique: true unless index_exists?(table_name, :uuid)
-
-    # optional unique index for yaml_key, if you want to use yaml keys for the data set identification (example for lookup items with parent lookup items)
-    # add_index table_name, :yaml_key, unique: true, length: 760, where: "yaml_key IS NOT NULL AND del_flag = 0" unless index_exists?(table_name, :yaml_key, unique: true, length: 760, where: "yaml_key IS NOT NULL AND del_flag = 0")
-    # alternative unique index for yaml_key with tenant_id, if you want to use yaml keys for the data set identification (example for lookup items with parent lookup items) and you have multiple tenants
-    # add_index table_name, [:tenant_id, :yaml_key], unique: true, length: { yaml_key: 760 }, where: "yaml_key IS NOT NULL AND del_flag = 0" unless index_exists?(:documentation_items, [:tenant_id, :yaml_key], unique: true, length: { yaml_key: 760 }, where: "yaml_key IS NOT NULL AND del_flag = 0")
+    create_plugin_main_table!(table_name:, uuid_size:, options:, charset:, collation:, charset_latin1:, collation_latin1:)
 
     # --- ---------------------- ---
-    # --- generate history table ---
+    # --- generate history table --- (see Db::PluginItemTables)
     # --- ---------------------- ---
 
-    unless data_source_exists?(h_table_name)
-      create_table(h_table_name, id: false, primary_key: :id, options:) do |t|
-        t.primary_key :id, :unsigned_integer, null: false, auto_increment: true
-        t.timestamps
-      end
-    end
-
-    add_column(h_table_name, :uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: uuid_size, comment: 'contains the universally unique identifier of this element') unless column_exists?(h_table_name, :uuid)
-
-    add_column(h_table_name, :tenant_id, :unsigned_integer, comment: 'reference field which could contain a reference to a tenant (by default the main tenant of the user)') unless column_exists?(h_table_name, :tenant_id)
-    add_column(h_table_name, :tenant_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: 61, comment: 'reference field which could contain a reference to a tenant (by default the main tenant of the user)') unless column_exists?(h_table_name, :tenant_uuid)
-
-    add_column(h_table_name, :extension_item_id, :unsigned_integer, comment: 'this field contains the user id of the user who has locked this data set.') unless column_exists?(h_table_name, :extension_item_id)
-    add_column(h_table_name, :extension_item_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: 68, comment: 'this field contains the user id of the user who has locked this data set.') unless column_exists?(h_table_name, :extension_item_uuid)
-
-    add_column(h_table_name, :parent_id, :unsigned_integer, comment: 'can be used to reference to an parent element of the same table') unless column_exists?(h_table_name, :parent_id)
-    add_column(h_table_name, :parent_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: uuid_size, comment: 'contains the universally unique identifier of the parent element') unless column_exists?(h_table_name, :parent_uuid)
-    add_column(h_table_name, :parent_version, :double, precision: 10, scale: 2, comment: 'this field contains an integer of the data set version of the parent data set') unless column_exists?(h_table_name, :parent_version)
-
-    add_column(h_table_name, :decimal_position, :double, precision: 10, scale: 2, comment: 'can be used to sort elements with the same parent_id') unless column_exists?(h_table_name, :decimal_position)
-
-    add_column(h_table_name, :reference_model, :string, collation: collation_latin1, charset: charset_latin1, limit: 255, comment: 'generic attribute which can contain a ruby model class, which this data set is referenced (need reference_id)') unless column_exists?(h_table_name, :reference_model)
-    add_column(h_table_name, :reference_id, :unsigned_integer, comment: 'generic attribute which can contain a id, which this data set is referenced (for 1:1-Relation, need reference_model)') unless column_exists?(h_table_name, :reference_id)
-    add_column(h_table_name, :reference_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: 150, comment: 'contains the universally unique identifier of the reference element') unless column_exists?(h_table_name, :reference_uuid)
-    add_column(h_table_name, :reference_version, :double, precision: 10, scale: 2, comment: 'this field contains an integer of the data set version of the reference data set') unless column_exists?(h_table_name, :reference_version)
-    add_column(h_table_name, :reference_parent_id, :unsigned_integer, comment: 'generic attribute which can contain a id, which this data set is referenced (for 1:1-Relation, need reference_model)') unless column_exists?(h_table_name, :reference_parent_id)
-    add_column(h_table_name, :reference_parent_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: 150, comment: 'contains the universally unique identifier of the reference element') unless column_exists?(h_table_name, :reference_parent_uuid)
-    add_column(h_table_name, :reference_parent_version, :double, precision: 10, scale: 2, comment: 'this field contains an integer of the data set version of the parent reference data set') unless column_exists?(h_table_name, :reference_version)
-
-    add_column(h_table_name, :active, :boolean, default: 1, comment: 'Is these data set active') unless column_exists?(h_table_name, :active)
-    add_column(h_table_name, :del_flag, :boolean, default: 0, comment: 'Is these data set logical deleted') unless column_exists?(h_table_name, :del_flag)
-
-    add_column(h_table_name, :creator_id, :unsigned_integer, comment: 'this field contains the user id of the creator of these element.') unless column_exists?(h_table_name, :creator_id)
-    add_column(h_table_name, :updater_id, :unsigned_integer, comment: 'this field contains the user id of the user who has changed this data set.') unless column_exists?(h_table_name, :updater_id)
-    add_column(h_table_name, :lock_user_id, :unsigned_integer, comment: 'this field contains the user id of the user who has locked this data set.') unless column_exists?(h_table_name, :lock_user_id)
-
-    add_column(h_table_name, :creator_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: 58, comment: 'this field contains the user id of the creator of these element.') unless column_exists?(h_table_name, :creator_uuid)
-    add_column(h_table_name, :updater_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: 58, comment: 'this field contains the user id of the user who has changed this data set.') unless column_exists?(h_table_name, :updater_uuid)
-    add_column(h_table_name, :lock_user_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: 58, comment: 'this field contains the user id of the user who has locked this data set.') unless column_exists?(h_table_name, :lock_user_uuid)
-
-    add_column(h_table_name, :locked_at, :datetime, comment: 'datetime when this data set was locked.') unless column_exists?(h_table_name, :locked_at)
-    add_column(h_table_name, :save_info, :text, collation:, charset:, limit: 16.megabytes, comment: 'this field contains json object change information (reference to the history data set, which fields have change, last value of the field, quick changes.') unless column_exists?(h_table_name, :save_info)
-    add_column(h_table_name, :version, :double, precision: 10, scale: 2, comment: 'this field contains an integer of the data set version of this data set') unless column_exists?(h_table_name, :version)
-    add_column(h_table_name, :tenant_independent, :boolean, default: false, comment: 'When true, this record is accessible across all tenants regardless of tenant restriction.') unless column_exists?(h_table_name, :tenant_independent)
-
-    add_column(h_table_name, :f_type, :string, collation: collation_latin1, charset: charset_latin1, limit: 100, comment: 'can be used to group this data set') unless column_exists?(h_table_name, :f_type)
-    add_column(h_table_name, :state, :string, collation: collation_latin1, charset: charset_latin1, limit: 100, comment: 'can be used to give a data set a state') unless column_exists?(h_table_name, :state)
-    add_column(h_table_name, :tags, :text, collation: collation_latin1, charset: charset_latin1, limit: 65_535, comment: 'can contain some tags for a search/filter') unless column_exists?(h_table_name, :tags)
-    add_column(h_table_name, :name, :string, collation:, charset:, limit: 150, comment: 'unique/shortcut name of an data set (example MPLS-004M)') unless column_exists?(h_table_name, :name)
-    add_column(h_table_name, :hierarchy_name, :text, collation:, charset:, limit: 65_535, comment: 'displayed hierarchy name') unless column_exists?(h_table_name, :hierarchy_name)
-
-    add_column(h_table_name, :yaml_key, :text, collation:, charset:, limit: 65_535, comment: 'yaml key with with this name and parent names point separated like parent_name.name  ') unless column_exists?(h_table_name, :yaml_key)
-    add_column(h_table_name, :language, :string, default: I18n.locale, collation: collation_latin1, charset: charset_latin1, limit: 2, comment: 'default language of this data set') unless column_exists?(h_table_name, :language)
-
-    add_column(h_table_name, :title, :string, collation:, charset:, limit: 150, comment: 'title of an data set (example: Multiconnect 4 Megabyte) ') unless column_exists?(h_table_name, :title)
-    add_column(h_table_name, :description, :text, collation:, charset:, limit: 65_535, comment: 'Data set of an data set (example: this is a Multiconnect 4 Megabyte) ') unless column_exists?(h_table_name, :description)
-
-    add_column(h_table_name, :history_info, :text, collation:, charset:, limit: 16.megabytes,comment: 'this field contains json object change information (reference to the original data set, which fields contains which have changed, last value of these fields.') unless column_exists?(h_table_name, :history_info)
-    add_column(h_table_name, :history_date, :datetime, comment: 'History datetime when this data set was saved.') unless column_exists?(h_table_name, :history_date)
-
-    add_column(h_table_name, :history_user_id, :unsigned_integer, comment: 'user id who saved this data set (changed the origingal).') unless column_exists?(h_table_name, :history_user_id)
-    add_column(h_table_name, :history_user_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: 58, comment: 'user id who saved this data set (changed the origingal).') unless column_exists?(h_table_name, :history_user_uuid)
-
-    add_column(h_table_name, :original_id, :unsigned_integer, comment: 'id of the data set in the original table') unless column_exists?(h_table_name, :original_id)
-    add_column(h_table_name, :original_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: uuid_size, comment: 'id of the data set in the original table') unless column_exists?(h_table_name, :original_uuid)
-
-    add_column(h_table_name, :history_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: h_uuid_size, comment: 'contains the universally unique identifier of this history element') unless column_exists?(h_table_name, :history_uuid)
-
-    add_column(h_table_name, :history_reference_model, :string, collation: collation_latin1, charset: charset_latin1, comment: 'generic attribute which can contain a ruby model class, which this data set is referenced (need history_reference_id)') unless column_exists?(h_table_name, :history_reference_model)
-    add_column(h_table_name, :history_reference_id, :unsigned_integer, comment: 'generic attribute which can contain a id, which this data set is referenced (need history_reference_model)') unless column_exists?(h_table_name, :history_reference_id)
-    add_column(h_table_name, :history_reference_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: 150, comment: 'generic attribute which can contain a uuid, which this data set is referenced (need history_reference_model)') unless column_exists?(h_table_name, :history_reference_uuid)
-    add_column(h_table_name, :history_reference_parent_id, :unsigned_integer, comment: 'generic attribute which can contain a id, which this data set is parent referenced (need history_reference_model)') unless column_exists?(h_table_name, :history_reference_parent_id)
-    add_column(h_table_name, :history_reference_parent_uuid, :string, collation: collation_latin1, charset: charset_latin1, limit: 150, comment: 'generic attribute which can contain a uuid, which this data set is parent referenced (need history_reference_model)') unless column_exists?(h_table_name, :history_reference_parent_uuid)
-
-    add_foreign_key(h_table_name, table_name, column: :original_id, primary_key: :id, on_delete: :nullify) unless foreign_key_exists?(h_table_name, table_name, column: :original_id)
-
-    add_foreign_key(h_table_name, table_name, column: :parent_id, primary_key: :id) unless index_exists?(h_table_name, :parent_id)
-    add_foreign_key(h_table_name, table_name, column: :parent_uuid, primary_key: :uuid) unless index_exists?(h_table_name, :parent_uuid)
-
-    add_foreign_key(h_table_name, :tenants, column: :tenant_id, primary_key: :id, on_delete: :nullify) unless index_exists?(h_table_name, :tenant_id)
-    add_foreign_key(h_table_name, :tenants, column: :tenant_uuid, primary_key: :uuid, on_delete: :nullify) unless index_exists?(h_table_name, :tenant_uuid)
-
-    add_foreign_key(h_table_name, :extension_items, column: :extension_item_id, primary_key: :id, on_delete: :nullify) unless index_exists?(h_table_name, :extension_item_id)
-    add_foreign_key(h_table_name, :extension_items, column: :extension_item_uuid, primary_key: :uuid, on_delete: :nullify) unless index_exists?(h_table_name, :extension_item_uuid)
-
-    add_foreign_key(h_table_name, :users, column: :creator_id, primary_key: :id, on_delete: :nullify) unless index_exists?(h_table_name, :creator_id)
-    add_foreign_key(h_table_name, :users, column: :creator_uuid, primary_key: :uuid, on_delete: :nullify) unless index_exists?(h_table_name, :creator_uuid)
-    add_foreign_key(h_table_name, :users, column: :updater_id, primary_key: :id, on_delete: :nullify) unless index_exists?(h_table_name, :updater_id)
-    add_foreign_key(h_table_name, :users, column: :updater_uuid, primary_key: :uuid, on_delete: :nullify) unless index_exists?(h_table_name, :updater_uuid)
-    add_foreign_key(h_table_name, :users, column: :lock_user_id, primary_key: :id, on_delete: :nullify) unless index_exists?(h_table_name, :lock_user_id)
-    add_foreign_key(h_table_name, :users, column: :lock_user_uuid, primary_key: :uuid, on_delete: :nullify) unless index_exists?(h_table_name, :lock_user_uuid)
-    add_foreign_key(h_table_name, :users, column: :history_user_id, primary_key: :id, on_delete: :nullify) unless index_exists?(h_table_name, :history_user_id)
-    add_foreign_key(h_table_name, :users, column: :history_user_uuid, primary_key: :uuid, on_delete: :nullify) unless index_exists?(h_table_name, :history_user_uuid)
-
-    execute "alter table #{h_table_name} ROW_FORMAT=COMPRESSED;"
+    create_plugin_history_table!(table_name:, h_table_name:, uuid_size:, h_uuid_size:, options:, charset:, collation:, charset_latin1:, collation_latin1:)
 
     ActiveRecord::Base.transaction do
       # --- ----------------------- ---

@@ -21,6 +21,7 @@
 import { Controller } from "@hotwired/stimulus"
 import plConnectConsumer from "../pl_connect/cable"
 import { presenceDotClass } from "../pl_connect/dom"
+import { ENDPOINTS, apiPost } from "../pl_connect/api"
 
 // Has to stay clearly below PresenceService's TTL, otherwise the entry expires
 // between two beats and the user flickers offline.
@@ -31,7 +32,12 @@ export default class extends Controller {
 
   static values = {
     active: Boolean,
-    i18n: Object
+    i18n: Object,
+    // Server-rendered PlConnectUserSetting#chat_status (see
+    // PlConnectWorkspaceController#_prepare_shell) - "away"/"dnd"/"offline" or
+    // blank for "automatic". Restores the chosen status immediately on a
+    // reload instead of flashing back to "online".
+    initialStatus: String
   }
 
   connect() {
@@ -40,8 +46,8 @@ export default class extends Controller {
     // Set (and kept) whenever the user picks a status from their own
     // name/avatar menu (see setManualState below) - overrides the automatic,
     // tab-visibility based state below until they pick "Online" again.
-    this.manualState = null
-    this.state = "online"
+    this.manualState = ["away", "dnd", "offline"].includes(this.initialStatusValue) ? this.initialStatusValue : null
+    this.state = this.manualState || "online"
     this.subscribe()
 
     this.onVisibilityChange = () => this.handleVisibilityChange()
@@ -115,8 +121,10 @@ export default class extends Controller {
 
   // Action for the "own name" status menu in the topbar (see
   // _topbar.html.erb). data-pl-connect-presence-state is "online" (clears the
-  // manual override, back to automatic tab-visibility based state), "away" or
-  // "dnd" (do not disturb).
+  // manual override, back to automatic tab-visibility based state), "away",
+  // "dnd" (do not disturb) or "offline". Persisted server side (see
+  // PlConnectUserSetting) so it is global - survives a reload and is visible
+  // to every other user, not just remembered in this one browser tab.
   setManualState(event) {
     const requested = event.currentTarget?.dataset?.plConnectPresenceState
     if (!requested) return
@@ -126,6 +134,8 @@ export default class extends Controller {
     this.beat()
 
     if (!this.heartbeatTimer && document.visibilityState !== "hidden") this.startHeartbeat()
+
+    apiPost(ENDPOINTS.setStatus, { status: this.manualState || "online" })
   }
 
   setState(state) {

@@ -51,6 +51,7 @@ import plConnectConsumer from "../pl_connect/cable"
 import { ENDPOINTS, apiGet, apiPost, apiUpload } from "../pl_connect/api"
 import { clear, el, toggle, presenceDotClass } from "../pl_connect/dom"
 import { createRingbackPlayer, createRingtonePlayer, playBeep } from "../pl_connect/tone_player"
+import { Room, RoomEvent, Track } from "livekit-client"
 
 export default class extends Controller {
     static targets = [
@@ -98,6 +99,9 @@ export default class extends Controller {
         this.localStream = null
         this.screenStream = null
         this.callSubscription = null
+        // livekit-client Room instance, set only for an SFU-relayed
+        // conference (see beginSfuSession) - null for every mesh call.
+        this.sfuRoom = null
         this.audioActive = true
         this.videoActive = false
         this.screenActive = false
@@ -219,7 +223,7 @@ export default class extends Controller {
         if (!resume?.uuid || !resume?.chat_uuid) return
 
         this.chatUuid = resume.chat_uuid
-        this.beginSession({ uuid: resume.uuid, state: "active" }, resume.video_active === true)
+        this.beginSession({ uuid: resume.uuid, state: "active", sfu: resume.sfu || null }, resume.video_active === true)
     }
 
     // Presence stream: an invite for any conversation, whether or not it is
@@ -297,6 +301,19 @@ export default class extends Controller {
         // place it happens for that path).
         this._showConnectingPanel()
 
+        // call.sfu (url + a short-lived per-user token, see
+        // PlConnect::SfuService) is only ever present for a conference
+        // relayed through the SFU media server (LiveKit) - see
+        // PlConnect::CallService.sfu_configured? - never for a direct 1:1
+        // call, which always stays on the plain mesh below.
+        if (call.sfu) {
+            await this.beginSfuSession(call, video)
+        } else {
+            await this.beginMeshSession(call, video)
+        }
+    }
+
+    async beginMeshSession(call, video) {
         try {
             this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true })
         } catch (e) {
@@ -317,11 +334,78 @@ export default class extends Controller {
         // call.state is only "ringing" here for the initiator of a direct call
         // that has not been answered yet - answer_call already transitions the
         // call to "active" before returning (see CallService#accept), so the
-        // callee's own beginSession() never sees "ringing".
-        this.awaitingVoicemail = call.state === "ringing"
+        // callee's own beginSession() never sees "ringing". "missed" here
+        // means the callee has Do Not Disturb enabled and CallService ended
+        // the call as missed immediately instead of ringing them at all (see
+        // CallService#_start_direct_call) - "voicemail_start" follows right
+        // behind on the call stream either way. A conference call (the only
+        // one that can ever be SFU-relayed instead) never rings either way,
+        // so voicemail/ringback are mesh-only concerns.
+        this.awaitingVoicemail = call.state === "ringing" || call.state === "missed"
         if (this.awaitingVoicemail && this.ringbackActiveValue) this.ringbackPlayer.start()
 
         this.subscribeCallChannel(call.uuid)
+    }
+
+    // Joins an SFU-relayed conference via livekit-client instead of the
+    // manual RTCPeerConnection mesh above - every browser here holds exactly
+    // one connection (to the SFU), regardless of how many participants are in
+    // the room, which is the whole point (see PlConnectCallItem::SFU_PARTICIPANT_LIMIT).
+    // PlConnectCallChannel (peer-joined/signal/...) is not used at all in this
+    // path - LiveKit's own room connection replaces it entirely.
+    async beginSfuSession(call, video) {
+        this.sfuRoom = new Room()
+
+        this.sfuRoom.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
+            const element = track.attach()
+            element.dataset.peerUuid = participant.identity
+            if (track.kind === Track.Kind.Video) {
+                element.className = "h-full max-h-full w-full rounded bg-black object-contain"
+                if (this.hasRemoteVideosTarget) this.remoteVideosTarget.appendChild(element)
+            } else {
+                // Remote audio still needs an (invisible) element attached to
+                // actually play - attach() creates one and returns it.
+                element.style.display = "none"
+                document.body.appendChild(element)
+            }
+        })
+
+        this.sfuRoom.on(RoomEvent.TrackUnsubscribed, (track) => {
+            track.detach().forEach((element) => element.remove())
+        })
+
+        // The SFU itself closing the connection (server restart, kicked, ...)
+        // must tear the panel down exactly like a mesh peer disconnecting -
+        // there is no separate "peer-left" to react to in this path.
+        this.sfuRoom.on(RoomEvent.Disconnected, () => this.teardownCall())
+
+        try {
+            await this.sfuRoom.connect(call.sfu.url, call.sfu.token)
+        } catch (e) {
+            this.toast(this.i18nValue.media_error)
+            await apiPost(ENDPOINTS.hangupCall, { chat_uuid: this.chatUuid, call_uuid: this.callUuid })
+            this.teardownCall()
+            return
+        }
+
+        this.audioActive = true
+        this.videoActive = video === true
+        await this.sfuRoom.localParticipant.setMicrophoneEnabled(this.audioActive)
+        await this.sfuRoom.localParticipant.setCameraEnabled(this.videoActive)
+        this._attachLocalSfuVideo()
+
+        this.renderMediaButtons()
+        if (this.hasStatusLabelTarget) this.statusLabelTarget.textContent = this.i18nValue.connected
+    }
+
+    // The local camera track only exists once setCameraEnabled(true) above
+    // actually finished publishing it - re-reads it from the room's own
+    // publication map rather than threading the track through return values.
+    _attachLocalSfuVideo() {
+        if (!this.sfuRoom || !this.hasLocalVideoTarget) return
+
+        const track = Array.from(this.sfuRoom.localParticipant.videoTrackPublications.values())[0]?.track
+        if (track) track.attach(this.localVideoTarget)
     }
 
     // Opens the call panel, docked (small), with a "connecting" status label -
@@ -607,20 +691,29 @@ export default class extends Controller {
 
     // --- controls --------------------------------------------------------------
 
-    toggleAudio() {
-        if (!this.localStream) return
+    async toggleAudio() {
+        if (!this.localStream && !this.sfuRoom) return
 
         this.audioActive = !this.audioActive
-        this.localStream.getAudioTracks().forEach((track) => { track.enabled = this.audioActive })
+        if (this.sfuRoom) {
+            await this.sfuRoom.localParticipant.setMicrophoneEnabled(this.audioActive)
+        } else {
+            this.localStream.getAudioTracks().forEach((track) => { track.enabled = this.audioActive })
+        }
         this.renderMediaButtons()
         this.persistMediaState()
     }
 
-    toggleVideo() {
-        if (!this.localStream) return
+    async toggleVideo() {
+        if (!this.localStream && !this.sfuRoom) return
 
         this.videoActive = !this.videoActive
-        this.localStream.getVideoTracks().forEach((track) => { track.enabled = this.videoActive })
+        if (this.sfuRoom) {
+            await this.sfuRoom.localParticipant.setCameraEnabled(this.videoActive)
+            this._attachLocalSfuVideo()
+        } else {
+            this.localStream.getVideoTracks().forEach((track) => { track.enabled = this.videoActive })
+        }
         this.renderMediaButtons()
         this.persistMediaState()
     }
@@ -628,9 +721,19 @@ export default class extends Controller {
     // Screen sharing replaces the outgoing video track's content only
     // (RTCRtpSender.replaceTrack) - no renegotiation, no second video track.
     // The same replacement is applied on every peer connection in the mesh at
-    // once, so all other participants see the share simultaneously.
+    // once, so all other participants see the share simultaneously. LiveKit's
+    // own setScreenShareEnabled does the SFU-mode equivalent internally - the
+    // server simply relays whichever track is currently published.
     async toggleScreen() {
         if (!this.callUuid) return
+
+        if (this.sfuRoom) {
+            this.screenActive = !this.screenActive
+            await this.sfuRoom.localParticipant.setScreenShareEnabled(this.screenActive)
+            this.renderMediaButtons()
+            this.persistMediaState()
+            return
+        }
 
         if (this.screenActive) {
             this.stopScreenShare()
@@ -951,6 +1054,9 @@ export default class extends Controller {
 
         this.peers.forEach((peer) => peer.pc.close())
         this.peers.clear()
+
+        this.sfuRoom?.disconnect()
+        this.sfuRoom = null
 
         this.localStream?.getTracks().forEach((track) => track.stop())
         this.localStream = null

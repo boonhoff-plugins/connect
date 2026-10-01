@@ -165,6 +165,46 @@ module PlConnect
       configured.positive? ? configured : 120
     end
 
+    # Master switch for relaying conference calls through an SFU media server
+    # (LiveKit) instead of a plain WebRTC mesh (see AddPlConnectSfuSupport,
+    # PlConnect::SfuService). Direct 1:1 calls never use this regardless of
+    # the switch - they are always exactly 2 participants, which the mesh
+    # already handles perfectly well.
+    def self.sfu_active?
+      value = PLUGIN&.dig(:pl_connect_connect, :sfu_active)
+      ActiveModel::Type::Boolean.new.cast(value) ? true : false
+    end
+
+    def self.sfu_url
+      PLUGIN&.dig(:pl_connect_connect, :sfu_url).to_s
+    end
+
+    def self.sfu_api_key
+      PLUGIN&.dig(:pl_connect_connect, :sfu_api_key).to_s
+    end
+
+    def self.sfu_api_secret
+      PLUGIN&.dig(:pl_connect_connect, :sfu_api_secret).to_s
+    end
+
+    # True only once an admin has switched sfu_active on AND actually filled
+    # in connection details - flipping the switch alone must stay harmless
+    # (conferences keep using the mesh) until a LiveKit server is really
+    # reachable, so nobody can accidentally break calling for everyone by
+    # toggling one boolean before the rest is configured.
+    def self.sfu_configured?
+      sfu_active? && sfu_url.present? && sfu_api_key.present? && sfu_api_secret.present?
+    end
+
+    # Configurable ceiling for SFU-relayed conferences, administrable via the
+    # "sfu_max_participants" LookupItem - can only ever be lowered, never
+    # raised past PlConnectCallItem::SFU_PARTICIPANT_LIMIT.
+    def self.sfu_participant_limit
+      configured = PLUGIN&.dig(:pl_connect_connect, :sfu_max_participants).to_i
+      configured = PlConnectCallItem::SFU_PARTICIPANT_LIMIT if configured <= 0
+      [ configured, PlConnectCallItem::SFU_PARTICIPANT_LIMIT ].min
+    end
+
     # uuid of the "voicemail_greeting_audio" file_lookup (see
     # AddPlConnectVoicemailGreeting) - referenced by fixed uuid, like
     # AddPlConnectCallAudioConfig's own group/item uuids, rather than by
@@ -354,6 +394,8 @@ module PlConnect
       inviter_participant = call.participant_for(@user)
       return _failure("You must be in the call to invite someone.") if inviter_participant.blank? || inviter_participant.left_at.present?
 
+      return _failure("This person has Do Not Disturb enabled and cannot be reached right now.") if PresenceService.dnd?(target_user.uuid)
+
       # target_user no longer has to already be a member of this conversation -
       # the tenant-wide directory search (see #invitable_members below) lets
       # you ring in any colleague, so they are added as a conversation member
@@ -434,6 +476,22 @@ module PlConnect
 
       @chat_item.save_element(c: @c, element: { call_active: true })
 
+      # A partner who explicitly set "do not disturb" is never actually rung -
+      # the call ends as missed immediately (same bookkeeping/system message as
+      # an ordinary unanswered timeout, see CallVoicemailTimeoutJob) and the
+      # caller is prompted for a voicemail right away instead of waiting out a
+      # ring that would never be answered.
+      if PresenceService.dnd?(partner.uuid)
+        _end_call(call, reason: "missed")
+        ActionCable.server.broadcast(call.stream_name, {
+          event: "voicemail_start",
+          call_uuid: call.uuid,
+          target_user_uuid: @user.uuid,
+          max_duration_seconds: self.class.voicemail_max_duration_seconds
+        })
+        return { successful: true, successful_text: nil, element: call.reload }
+      end
+
       ChatBroadcaster.call_state(chat_item: @chat_item, call_item: call, action: "started")
       _notify_invitee(call, partner)
       composer.create_system(event_key: "call.started", payload: { login: @user.login.to_s }, call_item_uuid: call.uuid)
@@ -447,8 +505,11 @@ module PlConnect
     # callee to ring. Nobody is notified/rung automatically (see the class doc
     # above and #invite below); other members join in via #accept whenever
     # they open the conversation and press the call button themselves, up to
-    # CallService.mesh_participant_limit.
+    # CallService.mesh_participant_limit (or .sfu_participant_limit once an
+    # SFU is configured, see below).
     def _start_group_call
+      use_sfu = self.class.sfu_configured?
+
       result = PlConnectCallItem.new.save_element(c: @c, element: {
         chat_item_id: @chat_item.id,
         chat_item_uuid: @chat_item.uuid,
@@ -458,7 +519,10 @@ module PlConnect
         room_key: PlConnectCallItem.generate_room_key,
         initiator_user_id: @user.id,
         initiator_user_uuid: @user.uuid,
-        max_participants: self.class.mesh_participant_limit,
+        # Set once, at creation time, and never re-derived afterwards - see
+        # AddPlConnectSfuSupport's own comment on PlConnectCallItem#full?.
+        sfu_active: use_sfu,
+        max_participants: use_sfu ? self.class.sfu_participant_limit : self.class.mesh_participant_limit,
         tenant_id: @chat_item.tenant_id,
         tenant_uuid: @chat_item.tenant_uuid
       })

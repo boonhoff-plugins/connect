@@ -27,6 +27,9 @@
   <div class="hidden flex min-h-0 flex-1 flex-col" data-pl-connect-chat-target="conversation">
 
     <header class="flex h-12 shrink-0 items-center gap-3 border-b border-base-300 bg-base-100 px-4">
+      <%# Presence dot of the conversation's other member - direct (1:1)
+          conversations only, shown/coloured by pl-connect-chat#applyConversationHeader. %>
+      <span class="hidden h-2.5 w-2.5 shrink-0 rounded-full" data-pl-connect-chat-target="conversationPresence"></span>
       <span class="min-w-0">
         <span class="block truncate text-sm font-semibold" data-pl-connect-chat-target="conversationTitle"></span>
         <span class="block truncate text-[11px] text-base-content/60" data-pl-connect-chat-target="conversationSubtitle"></span>

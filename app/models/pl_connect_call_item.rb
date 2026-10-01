@@ -25,6 +25,14 @@ class PlConnectCallItem < ApplicationRecord
   # instead of a full mesh, which is a separate, much larger feature.
   MESH_PARTICIPANT_LIMIT = 8
 
+  # Hard ceiling for a conference relayed through the SFU (LiveKit) instead of
+  # the mesh (see #sfu_active? / AddPlConnectSfuSupport /
+  # PlConnect::CallService.sfu_participant_limit) - an application-level
+  # safety cap, not a LiveKit protocol limit (LiveKit itself scales far
+  # higher); every browser still only maintains ONE connection, to the SFU,
+  # regardless of how many participants are in the room.
+  SFU_PARTICIPANT_LIMIT = 100
+
   belongs_to :chat_item, class_name: "PlConnectChatItem", foreign_key: "chat_item_id", optional: true, inverse_of: false
   belongs_to :initiator, class_name: "User", foreign_key: "initiator_user_id", optional: true, inverse_of: false
 
@@ -63,7 +71,8 @@ class PlConnectCallItem < ApplicationRecord
   end
 
   def full?
-    active_participants.count >= [ max_participants.to_i, MESH_PARTICIPANT_LIMIT ].min
+    ceiling = sfu_active? ? SFU_PARTICIPANT_LIMIT : MESH_PARTICIPANT_LIMIT
+    active_participants.count >= [ max_participants.to_i, ceiling ].min
   end
 
   # The ActionCable stream name used for SDP/ICE exchange.

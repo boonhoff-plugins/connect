@@ -15,6 +15,7 @@
     %>
     <%= render "pl_connect_workspace/conversation_list",
                conversations: @c[:pl_connect_conversations],
+               presence: @c[:pl_connect_conversations_presence],
                linked: true %>
   </section>
 

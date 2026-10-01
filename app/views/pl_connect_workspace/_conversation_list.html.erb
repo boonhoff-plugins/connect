@@ -17,6 +17,7 @@
 <% compact = local_assigns.fetch(:compact, false) %>
 <% linked  = local_assigns.fetch(:linked, false) %>
 <% conversations = local_assigns.fetch(:conversations, []) || [] %>
+<% presence = local_assigns.fetch(:presence, {}) || {} %>
 
 <div class="flex h-full min-h-0 flex-col bg-base-100"
      data-pl-connect-conversation-list
@@ -56,6 +57,7 @@
             row_class = "flex w-full items-start gap-3 px-3 py-2 text-left transition-colors hover:bg-base-200"
             row_tag   = linked ? :a : :button
             row_attrs = { class: row_class, "data-pl-connect-conversation-uuid": conversation[:uuid] }
+            row_attrs["data-pl-connect-partner-uuid"] = conversation[:partner_uuid] if conversation[:partner_uuid].present?
 
             if linked
               row_attrs[:href] = "/pl_connect_workspace/chat_element?chat=#{CGI.escape(conversation[:uuid].to_s)}"
@@ -66,9 +68,20 @@
           %>
           <li>
             <%= content_tag(row_tag, row_attrs) do %>
-              <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-base-300 text-xs font-semibold">
+              <span class="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-base-300 text-xs font-semibold">
                 <% if conversation[:f_type].to_s == "direct" %>
                   <%= pl_connect_initials(conversation[:title]) %>
+                  <%#
+                    Presence dot for the conversation's other member - only
+                    rendered when a state is actually known (presence feature
+                    active and the partner's uuid resolved), same green/red/
+                    amber/grey scheme as everywhere else presence is shown.
+                  %>
+                  <% if (state = presence[conversation[:partner_uuid]]).present? %>
+                    <span data-pl-connect-presence-dot
+                          class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-base-100 <%= pl_connect_presence_dot_class(state) %>"
+                          title="<%= I18n.t("pl_connect.presence.#{state}", default: state) %>"></span>
+                  <% end %>
                 <% else %>
                   <i class="<%= pl_connect_conversation_icon(conversation[:f_type]) %>" aria-hidden="true"></i>
                 <% end %>
