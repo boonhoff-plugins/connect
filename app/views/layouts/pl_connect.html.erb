@@ -59,7 +59,6 @@
       <%= turbo_stream_from "server_notification_#{session[:user][:id]}" %>
       <%= turbo_stream_from "server_notification" %>
       <span id="server_notification_div"></span>
-      <span id="event_log_live_count" data-count="0" class="hidden"></span>
     <% end %>
 
     <%#

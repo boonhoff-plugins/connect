@@ -38,6 +38,13 @@
 
   <div class="flex shrink-0 items-center gap-2">
     <%#
+      Live EventLog bell (admin users only), rendered from the core
+      EventLogBadgeComponent. Sits next to the presence indicator and shows
+      the same live audit counter as the main application's navigation.
+    %>
+    <%= render EventLogBadgeComponent.new(session: session) %>
+
+    <%#
       Presence indicator + own status menu. The state is held in the cache
       only (PlConnect::PresenceService) and never written to the database, so
       no movement profile can be reconstructed from it later. The dot starts

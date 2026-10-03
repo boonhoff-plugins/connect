@@ -1,4 +1,5 @@
-extension:  name: 'pl_connect_call_item'
+extension:
+  name: 'connect'
   type: 'plugin'
-  target_path: '../extensions/plugins/connect/pl_connect_call_item'
+  target_path: 'extensions/plugins/connect'
   version: '0.0.1'
