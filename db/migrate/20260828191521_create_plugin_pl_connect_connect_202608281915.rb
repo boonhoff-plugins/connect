@@ -92,9 +92,11 @@ class CreatePluginPlConnectConnect202608281915 < ActiveRecord::Migration[8.1]
         version_name = I18n.t('fields.version_items.name', extension_type:, name: model.underscore)
       end
 
-      if VersionItem.exists?(name: version_name)
-        version_item = VersionItem.find_by(name: version_name)
-      else
+      # Guard by the fixed uuid first: the name is I18n-derived and can differ
+      # between languages or a previous, partially applied import — a name-only
+      # check would insert an already existing uuid (version_items.uuid UNIQUE).
+      version_item = VersionItem.find_by(uuid: 'dad2222a-8c7f-4bae-b395-63800eab40b5--version_item--20260828211521') || VersionItem.find_by(name: version_name)
+      if version_item.blank?
         version_item = VersionItem.new.save_element(c:, check_uuid: false, element:
           { f_type: extension_type, name: version_name, uuid: 'dad2222a-8c7f-4bae-b395-63800eab40b5--version_item--20260828211521',
           extension_item_version: "0.0.1",
@@ -114,9 +116,11 @@ class CreatePluginPlConnectConnect202608281915 < ActiveRecord::Migration[8.1]
         role_name = I18n.t('fields.role.name', extension_type:, name: model.underscore)
       end
 
-      if Role.exists?(name: role_name)
-        role = Role.find_by(name: role_name)
-      else
+      # Guard by the fixed uuid first: the name is I18n-derived and can differ
+      # between languages or a previous, partially applied import — a name-only
+      # check would insert an already existing uuid (roles.uuid UNIQUE).
+      role = Role.find_by(uuid: '59a72eb8-4f50-4dc8-a64e-ba401f8702ea--role--20260828211521') || Role.find_by(name: role_name)
+      if role.blank?
         role = Role.new.save_element(c:, check_uuid: false, element: { f_type: 'controller', name: role_name,
           title: I18n.t('fields.role.title', name: model.camelcase.singularize),
           description: I18n.t('fields.role.description', name: model.camelcase.singularize),

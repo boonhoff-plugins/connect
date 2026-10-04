@@ -122,9 +122,11 @@ class CreatePluginPlConnectChatReactionItem202609190752 < ActiveRecord::Migratio
         version_name = I18n.t('fields.version_items.name', extension_type:, name: model.underscore)
       end
 
-      if VersionItem.exists?(name: version_name)
-        version_item = VersionItem.find_by(name: version_name)
-      else
+      # Guard by the fixed uuid first: the name is I18n-derived and can differ
+      # between languages or a previous, partially applied import — a name-only
+      # check would insert an already existing uuid (version_items.uuid UNIQUE).
+      version_item = VersionItem.find_by(uuid: '4bf5763f-616a-40fa-b629-bcfb3e9a911d--version_item--20260919095214') || VersionItem.find_by(name: version_name)
+      if version_item.blank?
         version_item = VersionItem.new.save_element(c:, check_uuid: false, element:
           { f_type: extension_type, name: version_name, uuid: '4bf5763f-616a-40fa-b629-bcfb3e9a911d--version_item--20260919095214',
           extension_item_version: "0.0.1",
@@ -144,9 +146,11 @@ class CreatePluginPlConnectChatReactionItem202609190752 < ActiveRecord::Migratio
         role_name = I18n.t('fields.role.name', extension_type:, name: model.underscore)
       end
 
-      if Role.exists?(name: role_name)
-        role = Role.find_by(name: role_name)
-      else
+      # Guard by the fixed uuid first: the name is I18n-derived and can differ
+      # between languages or a previous, partially applied import — a name-only
+      # check would insert an already existing uuid (roles.uuid UNIQUE).
+      role = Role.find_by(uuid: 'c7a8c5e2-fd01-4e0a-955c-2b0b5eed55cf--role--20260919095214') || Role.find_by(name: role_name)
+      if role.blank?
         role = Role.new.save_element(c:, check_uuid: false, element: { f_type: 'controller', name: role_name,
           title: I18n.t('fields.role.title', name: model.camelcase.singularize),
           description: I18n.t('fields.role.description', name: model.camelcase.singularize),
