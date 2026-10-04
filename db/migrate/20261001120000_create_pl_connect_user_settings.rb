@@ -29,10 +29,11 @@ class CreatePlConnectUserSettings < ActiveRecord::Migration[8.1]
 
     mysql = connection.adapter_name.to_s.downcase.include?("mysql")
     ascii = mysql ? { charset: "latin1", collation: "latin1_general_ci" } : {}
+    table_options = mysql ? "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" : nil
     uuid_size = 54 + TABLE.size
 
     unless data_source_exists?(TABLE)
-      create_table(TABLE, options: "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;", &:timestamps)
+      create_table(TABLE, options: table_options, &:timestamps)
     end
 
     add_column(TABLE, :uuid, :string, limit: uuid_size, comment: "Universally Unique Identifier of this element", **ascii) unless column_exists?(TABLE, :uuid)

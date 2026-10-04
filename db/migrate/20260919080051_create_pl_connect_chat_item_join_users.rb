@@ -22,9 +22,11 @@ class CreatePlConnectChatItemJoinUsers < ActiveRecord::Migration[8.1]
       if connection.adapter_name.to_s.downcase.include?("mysql")
         charset_latin1   = 'latin1'
         collation_latin1 = 'latin1_general_ci'
+        table_options    = 'CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'
       else
         charset_latin1   = nil
         collation_latin1 = nil
+        table_options    = nil
       end
 
       first_uuid_size  = 54 + first_table.size
@@ -32,7 +34,7 @@ class CreatePlConnectChatItemJoinUsers < ActiveRecord::Migration[8.1]
       join_uuid_size   = 54 + join_table.size
       join_h_uuid_size = 54 + join_history_table.size
 
-      create_table(join_table, options: 'CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;', &:timestamps) unless data_source_exists?(join_table)
+      create_table(join_table, options: table_options, &:timestamps) unless data_source_exists?(join_table)
 
       add_column(join_table, "#{first_prefix}_id", :unsigned_integer) unless column_exists?(join_table, "#{first_prefix}_id")
       add_column(join_table, "#{first_prefix}_uuid", :string, collation: collation_latin1, charset: charset_latin1, limit: first_uuid_size) unless column_exists?(join_table, "#{first_prefix}_uuid")
@@ -58,7 +60,7 @@ class CreatePlConnectChatItemJoinUsers < ActiveRecord::Migration[8.1]
 
       # history table
 
-      create_table(join_history_table, options: 'CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;', &:timestamps) unless data_source_exists?(join_history_table)
+      create_table(join_history_table, options: table_options, &:timestamps) unless data_source_exists?(join_history_table)
 
       add_column(join_history_table, "#{first_prefix}_id", :unsigned_integer) unless column_exists?(join_history_table, "#{first_prefix}_id")
       add_column(join_history_table, "#{first_prefix}_uuid", :string, collation: collation_latin1, charset: charset_latin1, limit: first_uuid_size) unless column_exists?(join_history_table, "#{first_prefix}_uuid")
