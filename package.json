@@ -1,0 +1,8 @@
+{
+  "name": "connect",
+  "private": true,
+  "description": "Boonhoff connect plugin — JavaScript dependencies. Installed by bin/upgrade (yarn install runs per extension layer that ships a package.json). esbuild resolves these packages from this folder's node_modules when bundling the plugin controllers.",
+  "dependencies": {
+    "livekit-client": "^2.22.3"
+  }
+}
