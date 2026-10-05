@@ -40,15 +40,26 @@
     switches it to a near-fullscreen panel for when the person or a
     shared screen needs to actually be readable. Both size variants are
     plain Tailwind utility classes swapped by the controller - no custom
-    CSS. %>
+    CSS.
+
+    The docked height is capped at min(24rem, 70dvh) rather than a flat
+    h-96 - on a short/mobile viewport (e.g. a phone, especially in
+    landscape) a flat 24rem can be taller than the visible window itself,
+    pushing the hangup button out of reach ("bricht nach unten aus");
+    dvh (not vh) is used for the same reason the layout's <body> already
+    uses h-dvh - it accounts for the mobile browser's collapsing address
+    bar. %>
 <div data-pl-connect-call-target="activePanel"
-     data-pl-connect-call-docked-class="fixed inset-x-4 bottom-4 z-40 flex h-96 flex-col gap-2 rounded-box bg-base-100 p-3 shadow-xl ring-1 ring-base-300 sm:inset-x-auto sm:right-4 sm:w-[28rem]"
+     data-pl-connect-call-docked-class="fixed inset-x-4 bottom-4 z-40 flex h-[min(24rem,70dvh)] flex-col gap-2 rounded-box bg-base-100 p-3 shadow-xl ring-1 ring-base-300 sm:inset-x-auto sm:right-4 sm:w-[28rem]"
      data-pl-connect-call-expanded-class="fixed inset-4 z-40 flex flex-col gap-2 rounded-box bg-base-100 p-4 shadow-xl ring-1 ring-base-300 sm:inset-8"
-     class="hidden fixed inset-x-4 bottom-4 z-40 flex h-96 flex-col gap-2 rounded-box bg-base-100 p-3 shadow-xl ring-1 ring-base-300 sm:inset-x-auto sm:right-4 sm:w-[28rem]">
+     class="hidden fixed inset-x-4 bottom-4 z-40 flex h-[min(24rem,70dvh)] flex-col gap-2 rounded-box bg-base-100 p-3 shadow-xl ring-1 ring-base-300 sm:inset-x-auto sm:right-4 sm:w-[28rem]">
   <div class="relative flex items-center justify-between gap-2">
     <p class="min-w-0 flex-1 truncate text-sm font-semibold" data-pl-connect-call-target="statusLabel"></p>
     <button type="button" class="btn btn-circle btn-ghost btn-xs" data-action="pl-connect-call#toggleInvite" data-pl-connect-call-target="inviteButton" title="<%= t('pl_connect.call.invite') %>">
       <i class="fa-solid fa-user-plus" aria-hidden="true"></i>
+    </button>
+    <button type="button" class="btn btn-circle btn-ghost btn-xs" data-action="pl-connect-call#toggleMinimize" data-pl-connect-call-target="minimizeButton" title="<%= t('pl_connect.call.minimize') %>">
+      <i class="fa-solid fa-minus" aria-hidden="true"></i>
     </button>
     <button type="button" class="btn btn-circle btn-ghost btn-xs" data-action="pl-connect-call#toggleExpand" data-pl-connect-call-target="expandButton">
       <i class="fa-solid fa-expand" aria-hidden="true"></i>
@@ -117,4 +128,33 @@
       <i class="fa-solid fa-phone-slash" aria-hidden="true"></i>
     </button>
   </div>
+</div>
+
+<%# Minimized bullet - shown INSTEAD of the active panel while
+    pl-connect-call#toggleMinimize has collapsed it. The call itself
+    (audio/video/peers) is completely untouched by minimizing - only this
+    panel's own visibility changes - so listening/talking continues while
+    the rest of the page is used normally.
+
+    Hovering reveals a small button strip to its LEFT (mute/camera/hangup)
+    via plain CSS (group/group-hover + max-w-0 -> max-w-xs, overflow-hidden,
+    transition-all) - no JS is needed for the reveal animation itself, only
+    for the button clicks and the initial bullet/panel visibility swap. %>
+<div data-pl-connect-call-target="minimizedBullet" class="group hidden fixed bottom-4 right-4 z-40 flex items-center">
+  <div class="flex max-w-0 items-center gap-1 overflow-hidden rounded-full bg-base-100 opacity-0 shadow-xl ring-1 ring-base-300 transition-all duration-150 group-hover:max-w-xs group-hover:px-2 group-hover:opacity-100">
+    <button type="button" class="btn btn-circle btn-ghost btn-sm" data-action="pl-connect-call#toggleAudio" data-pl-connect-call-target="bulletAudioButton"
+            data-pl-connect-call-active-icon="fa-microphone" data-pl-connect-call-inactive-icon="fa-microphone-slash">
+      <i class="fa-solid fa-microphone" aria-hidden="true"></i>
+    </button>
+    <button type="button" class="btn btn-circle btn-ghost btn-sm" data-action="pl-connect-call#toggleVideo" data-pl-connect-call-target="bulletVideoButton"
+            data-pl-connect-call-active-icon="fa-video" data-pl-connect-call-inactive-icon="fa-video-slash">
+      <i class="fa-solid fa-video" aria-hidden="true"></i>
+    </button>
+    <button type="button" class="btn btn-circle btn-error btn-sm" data-action="pl-connect-call#hangup">
+      <i class="fa-solid fa-phone-slash" aria-hidden="true"></i>
+    </button>
+  </div>
+  <button type="button" class="btn btn-circle btn-primary shadow-xl" data-action="pl-connect-call#toggleMinimize" title="<%= t('pl_connect.call.restore') %>">
+    <i class="fa-solid fa-phone" aria-hidden="true"></i>
+  </button>
 </div>

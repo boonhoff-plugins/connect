@@ -12,8 +12,9 @@
   element, so that the search field in the top bar and the unread badge in the
   rail are inside the same scope.
 %>
-<div class="flex h-full min-h-0 flex-1 flex-col bg-base-200"
-     data-pl-connect-message-pane>
+<div class="flex h-full min-h-0 flex-1 flex-col bg-base-200 max-md:hidden"
+     data-pl-connect-message-pane
+     data-pl-connect-chat-target="paneSection">
 
   <%# Shown until a conversation is opened. %>
   <div class="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center"
@@ -27,6 +28,12 @@
   <div class="hidden flex min-h-0 flex-1 flex-col" data-pl-connect-chat-target="conversation">
 
     <header class="flex h-12 shrink-0 items-center gap-3 border-b border-base-300 bg-base-100 px-4">
+      <%# Mobile only (md+ always shows the list alongside, so there is
+          nothing to "go back" to there) - returns to the conversation list,
+          see pl-connect-chat#closeConversation. %>
+      <button type="button" class="btn btn-ghost btn-sm md:hidden" data-action="pl-connect-chat#closeConversation">
+        <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+      </button>
       <%# Presence dot of the conversation's other member - direct (1:1)
           conversations only, shown/coloured by pl-connect-chat#applyConversationHeader. %>
       <span class="hidden h-2.5 w-2.5 shrink-0 rounded-full" data-pl-connect-chat-target="conversationPresence"></span>

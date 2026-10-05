@@ -58,6 +58,7 @@ export default class extends Controller {
         "incomingBanner", "incomingLabel",
         "activePanel", "statusLabel", "remoteVideos", "localVideo",
         "audioButton", "videoButton", "screenButton", "screenSlashIcon", "expandButton",
+        "minimizeButton", "minimizedBullet", "bulletAudioButton", "bulletVideoButton",
         "inviteButton", "invitePanel", "inviteSearch", "inviteList"
     ]
 
@@ -112,6 +113,11 @@ export default class extends Controller {
         // app/views/layouts/pl_connect.html.erb) so the actual Tailwind
         // classes live in the view, not hardcoded in this controller.
         this.expanded = false
+        // Collapsed down to the small floating bullet (toggleMinimize) - the
+        // call itself (audio/video/peers) keeps running untouched, only the
+        // panel's visibility changes, so listening/talking continues while
+        // the rest of the page is used normally.
+        this.minimized = false
 
         this.ringtonePlayer = createRingtonePlayer()
         this.ringbackPlayer = createRingbackPlayer()
@@ -414,13 +420,17 @@ export default class extends Controller {
     // instant feedback instead of a silent multi-second wait (see beginSession
     // and the class doc's "instant feedback" note above their call sites).
     _showConnectingPanel() {
-        // Every call starts docked, regardless of how the previous one was left
-        // - toggleExpand() only affects the call currently running.
+        // Every call starts docked and not minimized, regardless of how the
+        // previous one was left - toggleExpand()/toggleMinimize() only affect
+        // the call currently running.
         this.expanded = false
+        this.minimized = false
         this._applySizeClasses(this.activePanelTarget)
         if (this.hasLocalVideoTarget) this._applySizeClasses(this.localVideoTarget)
         if (this.hasExpandButtonTarget) this.expandButtonTarget.title = this.i18nValue.expand
+        if (this.hasMinimizeButtonTarget) this.minimizeButtonTarget.title = this.i18nValue.minimize
         if (this.hasStatusLabelTarget) this.statusLabelTarget.textContent = this.i18nValue.connecting
+        if (this.hasMinimizedBulletTarget) toggle(this.minimizedBulletTarget, false)
         toggle(this.activePanelTarget, true)
     }
 
@@ -909,6 +919,14 @@ export default class extends Controller {
         this.setButtonState(this.screenButtonTarget, this.hasScreenButtonTarget, this.screenActive,
             this.i18nValue.stop_share, this.i18nValue.share_screen)
 
+        // The minimized bullet's own mute/camera buttons mirror the same
+        // state - kept in sync here so toggling from either place (full panel
+        // or the collapsed bullet's hover strip) is always reflected in both.
+        this.setButtonState(this.bulletAudioButtonTarget, this.hasBulletAudioButtonTarget, this.audioActive,
+            this.i18nValue.mute, this.i18nValue.unmute)
+        this.setButtonState(this.bulletVideoButtonTarget, this.hasBulletVideoButtonTarget, this.videoActive,
+            this.i18nValue.camera_off, this.i18nValue.camera_on)
+
         // No native fa-display-slash icon exists - the "not sharing" state is a
         // plain diagonal line overlay (see the view) shown only while inactive.
         if (this.hasScreenSlashIconTarget) toggle(this.screenSlashIconTarget, !this.screenActive)
@@ -961,6 +979,22 @@ export default class extends Controller {
         if (!docked || !expandedClasses) return
 
         element.className = this.expanded ? expandedClasses : docked
+    }
+
+    // Collapses the active panel down to a small floating bullet (bottom-right)
+    // so the call keeps running - audio/video/peers are untouched, only the
+    // panel's own visibility changes - while the rest of the page is used
+    // normally. The bullet's own hover-revealed strip (mute/camera/hangup) is
+    // plain CSS (group-hover, see the view), no JS needed for the reveal
+    // itself.
+    toggleMinimize() {
+        this.minimized = !this.minimized
+        toggle(this.activePanelTarget, !this.minimized)
+        if (this.hasMinimizedBulletTarget) toggle(this.minimizedBulletTarget, this.minimized)
+
+        if (this.hasMinimizeButtonTarget) {
+            this.minimizeButtonTarget.title = this.minimized ? this.i18nValue.restore : this.i18nValue.minimize
+        }
     }
 
     // --- lifecycle from the chat stream ----------------------------------------
@@ -1067,6 +1101,7 @@ export default class extends Controller {
         if (this.hasLocalVideoTarget) this.localVideoTarget.srcObject = null
         if (this.hasRemoteVideosTarget) this.remoteVideosTarget.replaceChildren()
         if (this.hasActivePanelTarget) toggle(this.activePanelTarget, false)
+        if (this.hasMinimizedBulletTarget) toggle(this.minimizedBulletTarget, false)
         if (this.hasInvitePanelTarget) toggle(this.invitePanelTarget, false)
 
         this.resetState()
@@ -1079,6 +1114,7 @@ export default class extends Controller {
         this.videoActive = false
         this.screenActive = false
         this.expanded = false
+        this.minimized = false
         this.awaitingVoicemail = false
     }
 

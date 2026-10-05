@@ -1,8 +1,16 @@
 <%#
   Full chat surface: conversation list plus message pane.
+
+  Below the md breakpoint there is no room to show both side by side (see
+  pl_connect_chat_controller.js#_setMobilePane) - the list fills the screen
+  until a conversation is opened, which then fills the screen in its place;
+  the message pane's own "back" button (_message_pane.html.erb) returns to
+  the list. md+ screens show both at once, as before - the max-md: variants
+  toggled by JS never apply there.
 %>
 <div class="flex min-h-0 w-full">
-  <section class="flex min-h-0 w-80 shrink-0 flex-col border-r border-base-300">
+  <section class="flex min-h-0 w-full shrink-0 flex-col border-r border-base-300 md:w-80"
+           data-pl-connect-chat-target="sidebarSection">
     <%= render "pl_connect_workspace/conversation_list",
                conversations: @c[:pl_connect_conversations],
                presence: @c[:pl_connect_conversations_presence] %>

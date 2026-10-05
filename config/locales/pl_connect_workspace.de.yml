@@ -106,6 +106,8 @@ de:
       stop_share: "Freigabe beenden"
       expand: "Anruffenster vergrößern"
       collapse: "Anruffenster verkleinern"
+      minimize: "Anruffenster minimieren"
+      restore: "Anruffenster wiederherstellen"
       call_ended: "Anruf beendet"
       call_declined: "Anruf abgelehnt"
       call_missed: "Verpasster Anruf"

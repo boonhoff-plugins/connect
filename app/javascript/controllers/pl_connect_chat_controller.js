@@ -50,6 +50,8 @@ const PRESENCE_REFRESH_MS = 30000
 export default class extends Controller {
   static targets = [
     "conversationList",
+    "sidebarSection",
+    "paneSection",
     "emptyState",
     "conversation",
     "conversationTitle",
@@ -140,6 +142,7 @@ export default class extends Controller {
     this.typingUsers.clear()
 
     this.highlightConversation(uuid)
+    this._setMobilePane(true)
     toggle(this.emptyStateTarget, false)
     toggle(this.conversationTarget, true)
     clear(this.messagesTarget)
@@ -179,6 +182,26 @@ export default class extends Controller {
       button.classList.toggle("bg-base-200", active)
       button.setAttribute("aria-current", active ? "true" : "false")
     })
+  }
+
+  // Below the md breakpoint there is only room for one of the two columns at
+  // a time (see chat_element.html.erb) - a no-op at md+ since max-md:hidden
+  // never applies there, so the existing side-by-side layout is untouched.
+  _setMobilePane(conversationOpen) {
+    if (this.hasSidebarSectionTarget) this.sidebarSectionTarget.classList.toggle("max-md:hidden", conversationOpen)
+    if (this.hasPaneSectionTarget) this.paneSectionTarget.classList.toggle("max-md:hidden", !conversationOpen)
+  }
+
+  // Mobile "back" button in the message pane header - returns to the
+  // conversation list without navigating away, so picking a different
+  // conversation stays a single tap.
+  closeConversation() {
+    this.teardownSubscription()
+    this.chatUuid = null
+    this.highlightConversation(null)
+    this._setMobilePane(false)
+    toggle(this.emptyStateTarget, true)
+    toggle(this.conversationTarget, false)
   }
 
   conversationButtons() {

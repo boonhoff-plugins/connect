@@ -110,6 +110,8 @@ en:
       stop_share: "Stop sharing"
       expand: "Expand call window"
       collapse: "Collapse call window"
+      minimize: "Minimize call window"
+      restore: "Restore call window"
       call_ended: "Call ended"
       call_declined: "Call declined"
       call_missed: "Missed call"
