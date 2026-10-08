@@ -11,6 +11,7 @@ class PlConnectChatItemController < ApplicationController
   include TreeElementControllerConcern
   include ExportElementControllerConcern
   include ImportElementControllerConcern
+  include FileTemplateControllerConcern
   include JsonElementControllerConcern
   include QuickEditControllerConcern
   include PageConfigControllerConcern

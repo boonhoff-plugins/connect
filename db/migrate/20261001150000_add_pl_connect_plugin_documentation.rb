@@ -225,6 +225,105 @@ class AddPlConnectPluginDocumentation < ActiveRecord::Migration[8.1]
           no audio file involved).</li>
       </ul>
 
+      <h2>Required: reverse proxy must forward WebSocket traffic (ActionCable)</h2>
+      <p>
+        Presence/status, chat message delivery and call signalling (invites, accept/decline, mute
+        state) all travel over the Rails app's ActionCable WebSocket endpoint at
+        <code>/cable</code> - the same host/port as the rest of the application, not a separate
+        server. A reverse proxy placed in front of Rails (nginx, Apache, a managed load balancer,
+        ...) forwards plain HTTP requests correctly by default, but does <strong>not</strong>
+        forward WebSocket upgrade requests unless explicitly configured to - every one of the
+        symptoms below has the exact same root cause.
+      </p>
+
+      <h3>Symptoms of a missing/incorrect WebSocket proxy</h3>
+      <ul>
+        <li>The presence/status indicator never changes, for anyone.</li>
+        <li>Calls cannot be started, or an incoming call never shows up for the other side.</li>
+        <li>Every outgoing direct call rings for exactly <code>voicemail_timeout_seconds</code>
+          (30 by default) and then falls back to voicemail - because the invite never reached the
+          callee in the first place, so the call simply times out every single time rather than
+          being declined or missed.</li>
+        <li>The browser's developer console shows the page trying to open
+          <code>wss://yourdomain.example/cable</code> and failing (e.g. Firefox's
+          <code>NS_ERROR_WEBSOCKET_CONNECTION_REFUSED</code>, Chrome's
+          <code>WebSocket connection to '...' failed</code>).</li>
+      </ul>
+
+      <h3>How to verify which side is broken</h3>
+      <p>
+        From the server itself, bypassing the proxy entirely, send a real WebSocket handshake
+        directly to the Rails app (a plain <code>curl</code> GET without upgrade headers always
+        returns 404 here and proves nothing either way):
+      </p>
+      <pre><code>curl -i -N \
+  -H "Connection: Upgrade" -H "Upgrade: websocket" \
+  -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: SGVsbG8sIHdvcmxkIQ==" \
+  http://127.0.0.1:3000/cable</code></pre>
+      <p>
+        <code>HTTP/1.1 101 Switching Protocols</code> means Rails/Puma itself is fine and the
+        reverse proxy in front of it is the problem. Anything else (connection refused, a
+        different error) means the issue is on the Rails/Puma side instead (process not running,
+        wrong port, or the <code>solid_cable</code> adapter/database misconfigured - see
+        <code>system/config/cable.yml</code>).
+      </p>
+
+      <h3>nginx</h3>
+      <p>
+        Once (in the <code>http {}</code> block of <code>nginx.conf</code>):
+      </p>
+      <pre><code>map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}</code></pre>
+      <p>
+        In the same <code>server {}</code> block that already proxies the application
+        (<code>sites-enabled/...</code>), <strong>before</strong> the general
+        <code>location / { ... }</code>:
+      </p>
+      <pre><code>location /cable {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 3600s;
+}</code></pre>
+      <p>
+        <code>proxy_read_timeout</code> matters: WebSocket connections are long-lived, and
+        nginx's default 60-second read timeout would otherwise silently disconnect an idle one.
+        Apply with <code>nginx -t &amp;&amp; systemctl reload nginx</code> (reload, not restart).
+      </p>
+
+      <h3>Apache (httpd)</h3>
+      <p>
+        Requires <code>mod_proxy_wstunnel</code> (<code>a2enmod proxy_wstunnel</code> on
+        Debian/Ubuntu). Inside the existing <code>&lt;VirtualHost&gt;</code> that already proxies
+        to the app:
+      </p>
+      <pre><code>ProxyPass /cable ws://127.0.0.1:3000/cable
+ProxyPassReverse /cable ws://127.0.0.1:3000/cable</code></pre>
+
+      <h3>Caddy</h3>
+      <p>
+        Caddy's <code>reverse_proxy</code> forwards WebSocket upgrades automatically - no special
+        <code>/cable</code> block is needed as long as the existing directive already proxies the
+        whole domain to the app:
+      </p>
+      <pre><code>yourdomain.example {
+    reverse_proxy 127.0.0.1:3000
+}</code></pre>
+
+      <h3>Traefik</h3>
+      <p>
+        No special configuration either - Traefik detects and forwards the
+        <code>Connection: Upgrade</code> handshake automatically for any router already pointing
+        at the app's service/port.
+      </p>
+
       <h2>Conference size: mesh vs. media server (SFU)</h2>
       <p>
         By default, group/channel/team calls connect every participant's browser directly to
