@@ -145,6 +145,7 @@ export default class extends Controller {
         document.addEventListener("pl-connect:call-event", this.onCallEvent)
         document.addEventListener("pl-connect:conversation-opened", this.onConversationOpened)
 
+        this._log("debug", "controller connected, viewer", this.viewerUuidValue, "resume payload present:", !!this.resumeValue)
         this._maybeResumeCall()
     }
 
@@ -163,6 +164,16 @@ export default class extends Controller {
     // decoupled (no shared state object, no duplicated tracking of "chatUuid").
     get chatController() {
         return this.application.getControllerForElementAndIdentifier(this.element, "pl-connect-chat")
+    }
+
+    // Centralised, filterable console logging for diagnosing call/WebRTC issues
+    // from the browser console alone (e.g. two users testing a conference with
+    // no success) - filter devtools by "[pl-connect-call]" to see the full
+    // lifecycle/signalling/ICE trail for a session. debug = high-volume/routine
+    // (signal relay, ICE candidates), info = lifecycle milestones, warn =
+    // recoverable/unexpected, error = a path that gives up and shows a toast.
+    _log(level, ...args) {
+        console[level]("[pl-connect-call]", ...args)
     }
 
     // --- starting / receiving a call -----------------------------------------
@@ -193,12 +204,15 @@ export default class extends Controller {
         const chatUuid = this.chatController?.chatUuid
         if (!chatUuid) return
 
+        this._log("info", "starting outgoing call", "chat", chatUuid, "video:", video)
+
         // Instant feedback: the panel opens right away, well before the
         // server round trip and getUserMedia below finish (see beginSession).
         this._showConnectingPanel()
 
         const result = await apiPost(ENDPOINTS.startCall, { chat_uuid: chatUuid })
         if (!result.successful) {
+            this._log("error", "start_call failed", chatUuid, result.successful_text)
             this.teardownCall()
             return this.toast(result.successful_text)
         }
@@ -228,6 +242,7 @@ export default class extends Controller {
         }
         if (!resume?.uuid || !resume?.chat_uuid) return
 
+        this._log("info", "resuming call after reload", resume.uuid)
         this.chatUuid = resume.chat_uuid
         this.beginSession({ uuid: resume.uuid, state: "active", sfu: resume.sfu || null }, resume.video_active === true)
     }
@@ -238,6 +253,7 @@ export default class extends Controller {
         const payload = event.detail
         if (!payload || !payload.call_uuid || this.callUuid) return
 
+        this._log("info", "incoming call invite", payload.call_uuid, "from", payload.caller_login)
         this.incomingInvite = payload
         const template = this.i18nValue.incoming_call || ""
         if (this.hasIncomingLabelTarget) {
@@ -263,6 +279,8 @@ export default class extends Controller {
         this.dismissIncoming()
         if (!invite) return
 
+        this._log("info", "accepting incoming call", invite.call_uuid)
+
         // Instant feedback: the panel opens right away, well before the
         // server round trip and getUserMedia below finish (see beginSession).
         this._showConnectingPanel()
@@ -271,6 +289,7 @@ export default class extends Controller {
             chat_uuid: invite.chat_uuid, call_uuid: invite.call_uuid, accept: true
         })
         if (!result.successful) {
+            this._log("error", "answer_call (accept) failed", invite.call_uuid, result.successful_text)
             this.teardownCall()
             return this.toast(result.successful_text)
         }
@@ -284,6 +303,7 @@ export default class extends Controller {
         this.dismissIncoming()
         if (!invite) return
 
+        this._log("info", "declining incoming call", invite.call_uuid)
         await apiPost(ENDPOINTS.answerCall, { chat_uuid: invite.chat_uuid, call_uuid: invite.call_uuid, accept: false })
     }
 
@@ -300,6 +320,9 @@ export default class extends Controller {
         if (Array.isArray(call.ice_servers) && call.ice_servers.length > 0) {
             this.iceServersValue = call.ice_servers
         }
+
+        this._log("info", "beginSession", call.uuid, call.sfu ? "mode: sfu" : "mode: mesh",
+            "ice servers:", (this.iceServersValue || []).map((s) => s.urls))
 
         // Shows the panel immediately (idempotent - acceptIncoming/
         // beginOutgoingCall already called this before the server round trip;
@@ -323,11 +346,15 @@ export default class extends Controller {
         try {
             this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true })
         } catch (e) {
+            this._log("error", "getUserMedia failed", e.name, e.message)
             this.toast(this.i18nValue.media_error)
             await apiPost(ENDPOINTS.hangupCall, { chat_uuid: this.chatUuid, call_uuid: this.callUuid })
             this.teardownCall()
             return
         }
+
+        this._log("info", "local media acquired", "audio tracks:", this.localStream.getAudioTracks().length,
+            "video tracks:", this.localStream.getVideoTracks().length)
 
         this.audioActive = true
         this.videoActive = video === true
@@ -350,6 +377,7 @@ export default class extends Controller {
         this.awaitingVoicemail = call.state === "ringing" || call.state === "missed"
         if (this.awaitingVoicemail && this.ringbackActiveValue) this.ringbackPlayer.start()
 
+        this._log("debug", "subscribing to call channel", call.uuid)
         this.subscribeCallChannel(call.uuid)
     }
 
@@ -360,9 +388,11 @@ export default class extends Controller {
     // PlConnectCallChannel (peer-joined/signal/...) is not used at all in this
     // path - LiveKit's own room connection replaces it entirely.
     async beginSfuSession(call, video) {
+        this._log("info", "joining SFU room", call.sfu.url)
         this.sfuRoom = new Room()
 
         this.sfuRoom.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
+            this._log("debug", "SFU track subscribed", participant.identity, track.kind)
             const element = track.attach()
             element.dataset.peerUuid = participant.identity
             if (track.kind === Track.Kind.Video) {
@@ -377,23 +407,29 @@ export default class extends Controller {
         })
 
         this.sfuRoom.on(RoomEvent.TrackUnsubscribed, (track) => {
+            this._log("debug", "SFU track unsubscribed", track.kind)
             track.detach().forEach((element) => element.remove())
         })
 
         // The SFU itself closing the connection (server restart, kicked, ...)
         // must tear the panel down exactly like a mesh peer disconnecting -
         // there is no separate "peer-left" to react to in this path.
-        this.sfuRoom.on(RoomEvent.Disconnected, () => this.teardownCall())
+        this.sfuRoom.on(RoomEvent.Disconnected, () => {
+            this._log("warn", "SFU room disconnected")
+            this.teardownCall()
+        })
 
         try {
             await this.sfuRoom.connect(call.sfu.url, call.sfu.token)
         } catch (e) {
+            this._log("error", "SFU room connect failed", call.sfu.url, e.name, e.message)
             this.toast(this.i18nValue.media_error)
             await apiPost(ENDPOINTS.hangupCall, { chat_uuid: this.chatUuid, call_uuid: this.callUuid })
             this.teardownCall()
             return
         }
 
+        this._log("info", "SFU room connected", call.sfu.url)
         this.audioActive = true
         this.videoActive = video === true
         await this.sfuRoom.localParticipant.setMicrophoneEnabled(this.audioActive)
@@ -440,6 +476,21 @@ export default class extends Controller {
         this.callSubscription = plConnectConsumer().subscriptions.create(
             { channel: "PlConnectCallChannel", call_uuid: callUuid },
             {
+                // These three were previously undefined - a rejected or silently
+                // dropped subscription (wrong tenant/auth, channel raising on
+                // #subscribed, a proxy not forwarding the /cable WebSocket at all)
+                // gave ZERO feedback anywhere, which looks identical to "the other
+                // participant just never joined". Always check for these three
+                // lines first when a call mysteriously never connects.
+                connected() {
+                    controller._log("info", "call channel connected", callUuid)
+                },
+                disconnected() {
+                    controller._log("warn", "call channel disconnected", callUuid)
+                },
+                rejected() {
+                    controller._log("error", "call channel subscription REJECTED by server", callUuid)
+                },
                 received(payload) {
                     controller.handleSignallingPayload(payload)
                 }
@@ -453,6 +504,8 @@ export default class extends Controller {
         // Signalling addressed to someone else must never be touched, even
         // though it is broadcast to the whole room (see PlConnectCallChannel).
         if (payload.target_user_uuid && payload.target_user_uuid !== this.viewerUuidValue) return
+
+        this._log("debug", "signalling payload", payload.event, "from", payload.user_uuid)
 
         switch (payload.event) {
             case "peer-joined": {
@@ -476,6 +529,7 @@ export default class extends Controller {
             default:
                 // media_state is informational only in this phase (no remote
                 // mute/camera indicator yet) - ignored rather than treated as an error.
+                if (payload.event !== "media_state") this._log("warn", "unknown signalling event", payload.event)
                 break
         }
     }
@@ -488,20 +542,36 @@ export default class extends Controller {
         const existing = this.peers.get(peerUuid)
         if (existing) return existing.pc
 
+        this._log("info", "creating peer connection", peerUuid)
         const pc = new RTCPeerConnection({ iceServers: this.iceServersValue })
         this.localStream?.getTracks().forEach((track) => pc.addTrack(track, this.localStream))
 
         pc.ontrack = (event) => {
+            this._log("debug", "remote track received", peerUuid, event.track.kind)
             this._getOrCreateRemoteVideo(peerUuid).srcObject = event.streams[0]
         }
 
         pc.onicecandidate = (event) => {
             if (event.candidate) {
                 this.sendSignal({ type: "ice-candidate", target_user_uuid: peerUuid, data: event.candidate.toJSON() })
+            } else {
+                this._log("debug", "ICE gathering complete", peerUuid)
             }
         }
 
+        // Fires on STUN/TURN failures (bad credentials, server unreachable,
+        // firewall) - the single most useful signal for "call connects for one
+        // network but not another" style reports.
+        pc.onicecandidateerror = (event) => {
+            this._log("warn", "ICE candidate error", peerUuid, "code:", event.errorCode, event.errorText, event.url)
+        }
+
+        pc.oniceconnectionstatechange = () => {
+            this._log("info", "ICE connection state", peerUuid, "->", pc.iceConnectionState)
+        }
+
         pc.onconnectionstatechange = () => {
+            this._log("info", "peer connection state", peerUuid, "->", pc.connectionState)
             if (["failed", "closed"].includes(pc.connectionState)) this.handlePeerLeft(peerUuid)
         }
 
@@ -527,6 +597,7 @@ export default class extends Controller {
     }
 
     async handlePeerJoined(peerUuid) {
+        this._log("info", "peer joined, sending offer", peerUuid)
         const pc = this._ensurePeer(peerUuid)
         const offer = await pc.createOffer()
         await pc.setLocalDescription(offer)
@@ -537,6 +608,7 @@ export default class extends Controller {
         const peer = this.peers.get(peerUuid)
         if (!peer) return
 
+        this._log("info", "peer left", peerUuid)
         peer.pc.close()
         peer.videoEl?.remove()
         this.peers.delete(peerUuid)
@@ -562,7 +634,8 @@ export default class extends Controller {
                     await pc.addIceCandidate(new RTCIceCandidate(payload.data))
                 } catch (e) {
                     // Late/duplicate candidates happen under normal ICE gathering and
-                    // are safe to ignore.
+                    // are safe to ignore, but still worth seeing while debugging.
+                    this._log("debug", "addIceCandidate rejected (likely late/duplicate)", payload.user_uuid, e.message)
                 }
                 break
             }
@@ -572,7 +645,12 @@ export default class extends Controller {
     }
 
     sendSignal(message) {
-        this.callSubscription?.perform("signal", message)
+        if (!this.callSubscription) {
+            this._log("warn", "sendSignal called with no active call-channel subscription", message.type)
+            return
+        }
+        this._log("debug", "sending signal", message.type, "to", message.target_user_uuid)
+        this.callSubscription.perform("signal", message)
     }
 
     // --- voicemail -----------------------------------------------------------
@@ -820,6 +898,7 @@ export default class extends Controller {
 
         if (!this.callUuid) return
 
+        this._log("info", "hangup", this.callUuid)
         const chatUuid = this.chatUuid
         const callUuid = this.callUuid
         this.teardownCall()
@@ -1006,6 +1085,8 @@ export default class extends Controller {
         const payload = event.detail
         if (!payload || !payload.call_uuid) return
 
+        this._log("debug", "chat-stream call event", payload.event, payload.call_uuid)
+
         if (this.incomingInvite && this.incomingInvite.call_uuid === payload.call_uuid &&
             ["call.declined", "call.ended", "call.missed", "call.left"].includes(payload.event)) {
             this.dismissIncoming()
@@ -1060,6 +1141,8 @@ export default class extends Controller {
     // --- teardown ---------------------------------------------------------------
 
     teardownCall() {
+        if (this.callUuid) this._log("info", "tearing down call", this.callUuid)
+
         if (this.voicemailFallbackTimer) clearTimeout(this.voicemailFallbackTimer)
         this.voicemailFallbackTimer = null
 
