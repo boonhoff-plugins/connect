@@ -96,7 +96,7 @@ class CreatePluginPlConnectChatReactionItem202609190752 < ActiveRecord::Migratio
           ext_hash = { name: extension_name, decimal_position: count, tenant_id:, tenant_uuid:,
             uuid: 'd592a9c7-9183-43ba-a833-7474c5e13cc0--extension_item--20260919095214',
             creator_id: user_id, updater_id: user_id, creator_uuid: user_uuid, updater_uuid: user_uuid,
-            save_info: '{"type":"create","history":{},"fields":{}}', f_type: extension_type, extension_folder:,
+            save_info: '{"type":"create","history":{},"fields":{}}', f_type: 'sub_element', extension_folder:,
             title: "#{extension_type.capitalize}: #{title}", description: "#{extension_type.capitalize} #{title}" }
 
           if parent_extension_item.present?

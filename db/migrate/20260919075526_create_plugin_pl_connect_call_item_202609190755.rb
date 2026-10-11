@@ -96,7 +96,7 @@ class CreatePluginPlConnectCallItem202609190755 < ActiveRecord::Migration[8.1]
           ext_hash = { name: extension_name, decimal_position: count, tenant_id:, tenant_uuid:,
             uuid: '9ff66aad-5acf-46c9-955e-94035ed7ed8b--extension_item--20260919095526',
             creator_id: user_id, updater_id: user_id, creator_uuid: user_uuid, updater_uuid: user_uuid,
-            save_info: '{"type":"create","history":{},"fields":{}}', f_type: extension_type, extension_folder:,
+            save_info: '{"type":"create","history":{},"fields":{}}', f_type: 'sub_element', extension_folder:,
             title: "#{extension_type.capitalize}: #{title}", description: "#{extension_type.capitalize} #{title}" }
 
           if parent_extension_item.present?

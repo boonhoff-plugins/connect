@@ -96,7 +96,7 @@ class CreatePluginPlConnectChatMentionItem202609190754 < ActiveRecord::Migration
           ext_hash = { name: extension_name, decimal_position: count, tenant_id:, tenant_uuid:,
             uuid: '9d571bf0-933c-4cca-9e26-42052b04092b--extension_item--20260919095418',
             creator_id: user_id, updater_id: user_id, creator_uuid: user_uuid, updater_uuid: user_uuid,
-            save_info: '{"type":"create","history":{},"fields":{}}', f_type: extension_type, extension_folder:,
+            save_info: '{"type":"create","history":{},"fields":{}}', f_type: 'sub_element', extension_folder:,
             title: "#{extension_type.capitalize}: #{title}", description: "#{extension_type.capitalize} #{title}" }
 
           if parent_extension_item.present?
