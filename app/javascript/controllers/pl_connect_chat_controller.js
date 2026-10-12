@@ -241,7 +241,7 @@ export default class extends Controller {
     // A read-only or archived conversation must not offer a composer - the
     // server would reject the message anyway, and a disabled control is more
     // honest than an error after the fact.
-    const writable = chat.read_only !== true && chat.archived !== true
+    const writable = chat.readonly !== true && chat.archived !== true
     toggle(this.formTarget, writable)
   }
 

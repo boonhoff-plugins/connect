@@ -82,7 +82,7 @@ module PlConnect
         last_message_user_uuid: chat.last_message_user_uuid,
         message_count: chat.message_count.to_i,
         archived: chat.archived?,
-        read_only: chat.read_only?,
+        readonly: chat.read_only?,
         call_active: chat.call_active?,
         unread_count: membership&.unread_count.to_i,
         pinned: membership&.pinned ? true : false,

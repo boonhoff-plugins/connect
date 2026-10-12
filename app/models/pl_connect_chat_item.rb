@@ -12,6 +12,11 @@
 # IMPORTANT: unlike LinkItem, a conversation without any join rows is NOT
 # public. Access is always an explicit membership, which is why the read paths
 # use `for_user` / `member?` and never UserVisibilityConcern#visible_to_user.
+#
+# The read-only flag lives in the `read_only` column (not `readonly`), because
+# ActiveRecord reserves `readonly?` (ActiveRecord::Core) and raises
+# ActiveRecord::DangerousAttributeError for a column named `readonly`. The
+# serialized JSON contract exposes the flag under the `readonly` key instead.
 class PlConnectChatItem < ApplicationRecord
   include UserVisibilityConcern
   include AssociationOriginalModelConcern
